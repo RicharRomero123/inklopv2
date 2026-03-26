@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
+import 'package:http_parser/http_parser.dart'; // NECESARIO
 
 class UserApiService {
 
@@ -13,7 +15,7 @@ class UserApiService {
       print(token);
       print('======================================================\n');
 
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/username/$username');
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/check-username/$username');
 
       final response = await http.get(
           url,
@@ -37,36 +39,58 @@ class UserApiService {
     }
   }
 
-  // --- 2. ENVIAR DATOS DEL PERFIL (POST) ---
-  Future<bool> registerExtraData(Map<String, dynamic> payload, String token) async {
+  // --- 2. ENVIAR PERFIL COMPLETO (POST MULTIPART) ---
+  Future<bool> registerCreatorProfile({
+    required Map<String, dynamic> payload,
+    required String token,
+    File? imageFile
+  }) async {
     try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/register_extra_data');
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me/creator-profile');
+      var request = http.MultipartRequest('POST', url);
 
-      print('\n🚀 Enviando POST de registro a: $url');
-      print('📦 Payload a enviar: ${jsonEncode(payload)}'); // jsonEncode para verlo formato Swagger
+      request.headers.addAll({
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      });
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(payload),
-      );
+      // Enviamos el objeto 'data' como una parte JSON
+      request.files.add(http.MultipartFile.fromString(
+        'data',
+        jsonEncode(payload),
+        contentType: MediaType('application', 'json'),
+      ));
 
-      print('📥 Respuesta POST (Status ${response.statusCode}): ${response.body}\n');
+      // Enviamos el archivo 'file'
+      if (imageFile != null) {
+        request.files.add(await http.MultipartFile.fromPath(
+          'file',
+          imageFile.path,
+          contentType: MediaType('image', 'jpeg'),
+        ));
+      } else {
+        throw Exception('La foto de perfil es obligatoria');
+      }
+
+      print('🚀 Enviando Registro a: $url');
+      print('📦 Payload enviado: ${jsonEncode(payload)}');
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      print('📥 Respuesta (Status ${response.statusCode}): ${response.body}');
 
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print('❌ Error de red en POST register_extra_data: $e');
-      throw Exception('Error de conexión: $e');
+      print('❌ Error en registerCreatorProfile: $e');
+      return false;
     }
   }
 
   // --- 4. SUBIR FOTO DE PERFIL (PUT - Multipart) ---
   Future<bool> uploadProfileImage(String imagePath, String token) async {
     try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/images/change');
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me/image');
       print('\n📸 Subiendo imagen de perfil a: $url');
 
       // Creamos la petición Multipart para subir archivos
@@ -94,7 +118,7 @@ class UserApiService {
   // --- 3. VERIFICAR SI EL PERFIL YA ESTÁ COMPLETO (GET) ---
   Future<bool> isProfileCompleted(String token) async {
     try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users');
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me');
 
       print('🔍 Verificando si el usuario ya existe en: $url');
 

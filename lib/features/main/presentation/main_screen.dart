@@ -1,30 +1,53 @@
-
 import 'package:flutter/material.dart';
-import '../../../core/services/secure_storage_service.dart';
-import '../../auth/presentation/screens/welcome_screen.dart';
+import 'widgets/custom_nav_bar.dart';
+import 'screens/explore_page.dart';
+import 'screens/dashboard_page.dart';
+import 'screens/payments_page.dart';
+// 🚀 IMPORTA LA PANTALLA REAL (la de la carpeta profile)
+import '../../profile/presentation/screens/profile_page.dart';
 
-class MainScreen extends StatelessWidget {
-  const MainScreen({super.key});
+class MainScreen extends StatefulWidget {
+  final String accessToken; // Necesitamos el token para el perfil
+  const MainScreen({super.key, required this.accessToken});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  int _selectedIndex = 0;
+
+  // Usamos 'late' porque necesitamos inicializar la lista con el token del widget
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      const ExplorePage(),
+      const DashboardPage(),
+      const PaymentsPage(),
+      // 🚀 ENLAZAMOS LA PANTALLA REAL PASANDO EL TOKEN
+      ProfilePage(accessToken: widget.accessToken),
+    ];
+  }
+
+  void _onItemTapped(int index) {
+    setState(() => _selectedIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Inklop App'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              // Cerrar sesión
-              await SecureStorageService().deleteToken();
-              if (context.mounted) {
-                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const WelcomeScreen()), (r) => false);
-              }
-            },
-          )
-        ],
+      backgroundColor: Colors.white,
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
       ),
-      body: const Center(child: Text('¡Bienvenido a Inklop! Has ingresado con éxito.', textAlign: TextAlign.center, style: TextStyle(fontSize: 18))),
+      bottomNavigationBar: CustomNavBar(
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+      ),
     );
   }
 }

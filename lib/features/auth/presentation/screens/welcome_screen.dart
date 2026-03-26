@@ -15,47 +15,47 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  // Instanciamos todos los servicios que necesitamos
   final AuthService _authService = AuthService();
   final UserApiService _userApiService = UserApiService();
   final SecureStorageService _storageService = SecureStorageService();
 
-  // Esta variable controlará si mostramos los botones o el circulito de carga
   bool _isLoading = false;
 
   Future<void> _handleSocialAuth(String connection) async {
-    // 1. Ocultamos los botones y mostramos "Cargando..."
     setState(() => _isLoading = true);
 
     try {
-      // 2. Auth0 abre el navegador y nos devuelve el Token
-      final token = await _authService.loginSocial(connection);
+      final result = await _authService.loginSocialWithDetails(connection);
 
-      if (token != null && mounted) {
-        print('✅ Token de Auth0 obtenido. Consultando al backend...');
+      final token = result['token'];
+      final email = result['email'];
 
-        // 3. 🚦 AQUÍ SUCEDE LA MAGIA: Consultamos tu API apenas tenemos el token
+      if (token != null && email != null && mounted) {
         final isCompleted = await _userApiService.isProfileCompleted(token);
 
         if (isCompleted) {
-          // 🟢 EL USUARIO YA EXISTE: Guardamos el token en memoria y vamos al Home
-          print('🚀 Usuario antiguo detectado. Redirigiendo al MainScreen...');
           await _storageService.saveToken(token);
 
           if (mounted) {
             Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const MainScreen()),
-                    (route) => false // Esto borra el historial para que no pueda regresar al Login
+                MaterialPageRoute(
+                  // 🚀 CORREGIDO: Usamos la variable 'token' y quitamos 'const'
+                  builder: (_) => MainScreen(accessToken: token),
+                ),
+                    (route) => false
             );
           }
         } else {
-          // 🔴 ES UN USUARIO NUEVO: Lo mandamos a ingresar su fecha
-          print('📝 Usuario nuevo detectado. Redirigiendo al registro...');
           if (mounted) {
             Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => BirthDateScreen(accessToken: token))
+                MaterialPageRoute(
+                    builder: (_) => BirthDateScreen(
+                        accessToken: token,
+                        email: email
+                    )
+                )
             );
           }
         }
@@ -67,7 +67,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         );
       }
     } finally {
-      // 4. Si hubo un error o el usuario canceló, volvemos a mostrar los botones
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -86,30 +85,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               const Text('Bienvenido a Inklop', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
               const SizedBox(height: 10),
               const Text('Monetiza tu creatividad hoy mismo', style: TextStyle(fontSize: 16, color: Colors.grey), textAlign: TextAlign.center),
-
               const Spacer(),
-
-              // Si está cargando, mostramos el indicador. Si no, mostramos los botones.
               if (_isLoading)
                 const Center(child: CircularProgressIndicator(color: Colors.black))
               else ...[
                 SocialButton(
-                  iconPath: 'assets/images/google_icon.png', // Asegúrate de tener tu imagen en esta ruta
+                  iconPath: 'assets/images/google_icon.png',
                   label: 'Continuar con Google',
                   onTap: () => _handleSocialAuth('google-oauth2'),
                 ),
                 const SizedBox(height: 16),
-
                 SocialButton(
-                  iconPath: 'assets/images/apple_icon.png', // Asegúrate de tener tu imagen en esta ruta
+                  iconPath: 'assets/images/apple_icon.png',
                   label: 'Continuar con Apple',
                   onTap: () => _handleSocialAuth('apple'),
                 ),
                 const SizedBox(height: 24),
-
                 FilledButton(
                   onPressed: () {
-                    // 👇 Aquí hacemos la navegación a tu nueva pantalla 👇
                     Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const EmailAuthScreen())

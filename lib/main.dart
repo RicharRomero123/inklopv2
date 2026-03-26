@@ -20,7 +20,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Inklop',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.black), useMaterial3: true),
+      theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.black),
+          useMaterial3: true
+      ),
       home: FutureBuilder<String?>(
         future: _checkLoginStatus(),
         builder: (context, snapshot) {
@@ -28,9 +31,10 @@ class MyApp extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
-          // Si encontró el token, va al Home. Si no, al Login.
+
+          // 🚀 CORREGIDO: Si encontró el token, usamos snapshot.data! y quitamos el const
           if (snapshot.hasData && snapshot.data != null) {
-            return const MainScreen();
+            return MainScreen(accessToken: snapshot.data!);
           } else {
             return const WelcomeScreen();
           }

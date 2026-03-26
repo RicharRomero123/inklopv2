@@ -32,7 +32,15 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
     _passwordFocus.addListener(() => setState(() {}));
   }
 
-  // Separamos el diálogo en una función para mantener el código ordenado
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    super.dispose();
+  }
+
   void _showVerificationDialog() {
     if (!mounted) return;
     showDialog(
@@ -50,8 +58,8 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: () {
-                  Navigator.pop(context); // Cierra el diálogo
-                  _submit(); // Intenta iniciar sesión automáticamente de nuevo
+                  Navigator.pop(context);
+                  _submit();
                 },
                 style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF1A1A1A),
@@ -63,7 +71,7 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                setState(() => _passwordController.clear()); // Limpia la contraseña
+                setState(() => _passwordController.clear());
               },
               child: const Text('Lo haré más tarde', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
             )
@@ -91,59 +99,56 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
       String? token;
 
       try {
-        // --- INTENTO 1: LOGIN DIRECTO ---
-        print('🔐 Intentando iniciar sesión...');
         token = await _authService.loginWithEmail(email, password);
-
       } catch (loginError) {
-        // --- INTENTO 2: SI FALLA, INTENTAMOS REGISTRAR ---
-        print('⚠️ Login falló. Intentando registrar como cuenta nueva...');
         try {
           await _authService.signUpWithEmail(email, password);
-          print('✅ Registro exitoso. Pidiendo verificación...');
-
           setState(() => _isLoading = false);
           _showVerificationDialog();
-          return; // Detenemos aquí hasta que el usuario verifique
-
+          return;
         } catch (signUpError) {
-          // Si el registro también falla, analizamos por qué
           final errorStr = signUpError.toString().toLowerCase();
-
-          if (errorStr.contains('user already exists') || errorStr.contains('ya existe')) {
-            // El usuario SÍ existe, entonces el error de login fue porque puso mal la contraseña
+          if (errorStr.contains('user already exists')) {
             throw Exception('La contraseña es incorrecta.');
           } else {
-            // Es un usuario nuevo, pero puso una contraseña débil (ej. "1234")
             throw Exception(signUpError.toString().replaceAll('Exception:', '').trim());
           }
         }
       }
 
-      // --- 🚦 EL SEMÁFORO (Si llegamos aquí, es porque el login fue exitoso) ---
       if (token != null && mounted) {
-        print('🚦 Consultando estado del perfil en backend...');
         final isCompleted = await _userApiService.isProfileCompleted(token);
 
         if (isCompleted) {
-          print('🟢 Perfil completo. Yendo al Home...');
           await _storageService.saveToken(token);
-          if (mounted) Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainScreen()), (route) => false);
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  // 🚀 CORREGIDO: Usamos la variable 'token' y quitamos 'const'
+                  builder: (_) => MainScreen(accessToken: token!),
+                ),
+                    (route) => false
+            );
+          }
         } else {
-          print('🔴 Perfil incompleto o nuevo. Yendo a Cumpleaños...');
-          if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => BirthDateScreen(accessToken: token!)));
+          if (mounted) {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => BirthDateScreen(
+                      accessToken: token!,
+                      email: email,
+                    )
+                )
+            );
+          }
         }
       }
-
     } catch (e) {
-      print('❌ ERROR: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${e.toString().replaceAll('Exception:', '').trim()}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            )
+            SnackBar(content: Text('Error: ${e.toString().replaceAll('Exception:', '').trim()}'), backgroundColor: Colors.red)
         );
       }
     } finally {
@@ -157,7 +162,7 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white, elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20), onPressed: () => Navigator.pop(context)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -170,18 +175,18 @@ class _EmailAuthScreenState extends State<EmailAuthScreen> {
               const SizedBox(height: 10),
               const Text('Ingresa tu correo y contraseña para continuar', style: TextStyle(fontSize: 16, color: Colors.grey), textAlign: TextAlign.center),
               const SizedBox(height: 40),
-
               CustomInput(label: 'Correo Electrónico', hint: 'ejemplo@correo.com', controller: _emailController, focusNode: _emailFocus),
               const SizedBox(height: 16),
-
               CustomInput(label: 'Contraseña', hint: '••••••••', controller: _passwordController, focusNode: _passwordFocus),
               const SizedBox(height: 32),
-
               SizedBox(
                 width: double.infinity, height: 56,
                 child: FilledButton(
                   onPressed: _isLoading ? null : _submit,
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A1A1A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                  ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

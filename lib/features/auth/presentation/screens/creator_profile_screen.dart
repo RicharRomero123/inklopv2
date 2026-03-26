@@ -3,15 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:inklop_v1/core/utils/custom_input.dart'; // Ajusta la ruta si es necesario
+import 'package:inklop_v1/core/utils/custom_input.dart';
+import 'package:inklop_v1/features/social_media/presentation/screens/social_media_link_screen.dart';
 import '../../../../core/services/secure_storage_service.dart';
 import '../../data/user_api_service.dart';
-import '../../../main/presentation/main_screen.dart';
 
 class CreatorProfileScreen extends StatefulWidget {
   final String accessToken;
   final String birthDate;
-  const CreatorProfileScreen({super.key, required this.accessToken, required this.birthDate});
+  final String email;
+
+  const CreatorProfileScreen({
+    super.key,
+    required this.accessToken,
+    required this.birthDate,
+    required this.email,
+  });
 
   @override
   State<CreatorProfileScreen> createState() => _CreatorProfileScreenState();
@@ -26,21 +33,34 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   bool? _isUsernameValid;
   bool _isLoadingPost = false;
 
-  // Variables para la foto de perfil
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
 
   String _selectedDocType = 'DNI';
+  String _selectedCountry = 'Perú';
+  String _selectedCity = 'Lima';
+
   final List<String> _docTypes = ['DNI', 'RUC', 'CE', 'PASAPORTE'];
+  final List<String> _peruCities = [
+    'Lima', 'Arequipa', 'Trujillo', 'Chiclayo', 'Iquitos', 'Piura', 'Cusco', 'Huancayo'
+  ];
 
   final _controllers = {
-    'username': TextEditingController(), 'nombre': TextEditingController(),
-    'apellido': TextEditingController(), 'documento': TextEditingController(),
-    'bio': TextEditingController(), 'pais': TextEditingController(), 'ciudad': TextEditingController(),
+    'username': TextEditingController(),
+    'nombre': TextEditingController(),
+    'apellido': TextEditingController(),
+    'documento': TextEditingController(),
+    'telefono': TextEditingController(),
+    'bio': TextEditingController(),
   };
+
   final _focusNodes = {
-    'username': FocusNode(), 'nombre': FocusNode(), 'apellido': FocusNode(),
-    'documento': FocusNode(), 'bio': FocusNode(), 'pais': FocusNode(), 'ciudad': FocusNode(),
+    'username': FocusNode(),
+    'nombre': FocusNode(),
+    'apellido': FocusNode(),
+    'documento': FocusNode(),
+    'telefono': FocusNode(),
+    'bio': FocusNode(),
   };
 
   @override
@@ -49,106 +69,121 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     _focusNodes.forEach((k, v) => v.addListener(() => setState(() {})));
   }
 
-  // --- Función para seleccionar la imagen ---
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (image != null) {
-        setState(() {
-          _profileImage = File(image.path);
-        });
-      }
-    } catch (e) {
-      print("Error al seleccionar imagen: $e");
-    }
-  }
-
   void _onUsernameChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    if (value.isEmpty) { setState(() { _isUsernameValid = null; _isCheckingUsername = false; }); return; }
+    if (value.isEmpty) {
+      setState(() { _isUsernameValid = null; _isCheckingUsername = false; });
+      return;
+    }
 
     setState(() => _isCheckingUsername = true);
     _debounce = Timer(const Duration(milliseconds: 600), () async {
       final result = await _apiService.checkUsername(value, widget.accessToken);
       if (mounted) {
         setState(() {
-          _isUsernameValid = result['valid'] == true && result['exists'] == false;
+          _isUsernameValid = (result['valid'] == true && result['exists'] == false);
           _isCheckingUsername = false;
         });
       }
     });
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (image != null) setState(() => _profileImage = File(image.path));
+    } catch (e) {
+      debugPrint("Error seleccionando imagen: $e");
+    }
+  }
+
   Future<void> _submitData() async {
     if (_isUsernameValid != true) return;
 
-    if (_controllers['nombre']!.text.isEmpty || _controllers['apellido']!.text.isEmpty ||
-        _controllers['documento']!.text.isEmpty || _controllers['pais']!.text.isEmpty ||
-        _controllers['ciudad']!.text.isEmpty || _controllers['bio']!.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor llena todos los campos.'), backgroundColor: Colors.orange));
+    if (_profileImage == null) {
+      _showSnackBar('Por favor, selecciona una foto de perfil.', Colors.orange);
+      return;
+    }
+
+    if (_controllers.values.any((c) => c.text.trim().isEmpty)) {
+      _showSnackBar('Por favor, completa todos los campos.', Colors.orange);
       return;
     }
 
     setState(() => _isLoadingPost = true);
 
     try {
-      // 1. CONSTRUIR PAYLOAD (POST)
       final payload = {
         "real_name": '${_controllers['nombre']!.text} ${_controllers['apellido']!.text}'.trim(),
         "username": _controllers['username']!.text.trim(),
+        "email": widget.email,
         "typeDocument": _selectedDocType,
         "document": _controllers['documento']!.text.trim(),
-        // 🔥 SOLUCIÓN: URL temporal válida para que el backend no lance Error 400
-        "avatarUrl": "https://ui-avatars.com/api/?name=User&background=random",
-        "country": _controllers['pais']!.text.trim(),
-        "city": _controllers['ciudad']!.text.trim(),
+        "country": _selectedCountry,
+        "city": _selectedCity,
+        "phoneNumber": _controllers['telefono']!.text.trim(),
         "birthDate": widget.birthDate,
         "description": _controllers['bio']!.text.trim()
       };
 
-      print('\n============= JSON PARA SWAGGER (POST) =============');
-      print(jsonEncode(payload));
+      final success = await _apiService.registerCreatorProfile(
+        payload: payload,
+        token: widget.accessToken,
+        imageFile: _profileImage,
+      );
 
-      // 2. ENVIAR POST
-      final successPost = await _apiService.registerExtraData(payload, widget.accessToken);
-
-      if (successPost) {
-        // 3. SI HAY IMAGEN, ENVIAR PUT MULTIPART
-        if (_profileImage != null) {
-          print('Enviando PUT de imagen...');
-          await _apiService.uploadProfileImage(_profileImage!.path, widget.accessToken);
-        }
-
-        // 4. GUARDAR TOKEN Y NAVEGAR AL HOME
+      if (success) {
         await _storageService.saveToken(widget.accessToken);
         if (mounted) {
-          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainScreen()), (route) => false);
+          // 🚀 2. CAMBIO AQUÍ: Ahora navegamos a SocialMediaLinkScreen
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SocialMediaLinkScreen(accessToken: widget.accessToken),
+            ),
+                (route) => false,
+          );
         }
       } else {
-        throw Exception('El servidor rechazó los datos (Error 400 u otro). Revisa la consola.');
+        throw Exception('Error 400: El servidor rechazó los datos. Revisa el log.');
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      if (mounted) _showSnackBar(e.toString(), Colors.red);
     } finally {
       if (mounted) setState(() => _isLoadingPost = false);
     }
   }
 
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    Widget? userSuffix = _isCheckingUsername ? const Padding(padding: EdgeInsets.all(14), child: CircularProgressIndicator(strokeWidth: 2))
-        : (_isUsernameValid == true ? const Icon(Icons.check_circle, color: Colors.green) : (_isUsernameValid == false ? const Icon(Icons.cancel, color: Colors.red) : null));
+    Widget? usernameStatusIcon = _isCheckingUsername
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        : (_isUsernameValid == true
+        ? const Icon(Icons.check_circle, color: Colors.green)
+        : (_isUsernameValid == false ? const Icon(Icons.cancel, color: Colors.red) : null));
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black), onPressed: () => Navigator.pop(context))),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // SECCIÓN DEL AVATAR CON LA LIBRERÍA DE FOTOS
               Center(
                 child: GestureDetector(
                   onTap: _pickImage,
@@ -159,7 +194,9 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                         radius: 50,
                         backgroundColor: const Color(0xFFF3F3F3),
                         backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                        child: _profileImage == null ? const Icon(Icons.person, size: 50, color: Colors.grey) : null,
+                        child: _profileImage == null
+                            ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                            : null,
                       ),
                       Container(
                         padding: const EdgeInsets.all(6),
@@ -170,81 +207,138 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              const Center(child: Text('Completa Tu Perfil', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
-              const Center(child: Text('Date a conocer a otros creadores y la comunidad Inklop', style: TextStyle(fontSize: 13, color: Colors.grey))),
               const SizedBox(height: 24),
+              const Center(child: Text('Completa Tu Perfil', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+              const Center(child: Text('Date a conocer en la comunidad Inklop', style: TextStyle(fontSize: 14, color: Colors.grey))),
+              const SizedBox(height: 32),
 
-              CustomInput(label: 'Nombre de usuario', hint: '@username', controller: _controllers['username']!, focusNode: _focusNodes['username']!, onChanged: _onUsernameChanged, suffixIcon: userSuffix),
-              if (_isUsernameValid == false && !_isCheckingUsername) const Padding(padding: EdgeInsets.only(left: 8.0), child: Text('Usuario no disponible', style: TextStyle(color: Colors.red, fontSize: 12))),
-              const SizedBox(height: 12),
+              CustomInput(
+                label: 'Nombre de usuario',
+                hint: '@username',
+                controller: _controllers['username']!,
+                focusNode: _focusNodes['username']!,
+                onChanged: _onUsernameChanged,
+                suffixIcon: Padding(padding: const EdgeInsets.all(12), child: usernameStatusIcon),
+              ),
+              if (_isUsernameValid == false)
+                const Padding(padding: EdgeInsets.only(left: 8, top: 4), child: Text('Usuario no disponible', style: TextStyle(color: Colors.red, fontSize: 12))),
+              const SizedBox(height: 16),
 
               Row(
                 children: [
-                  Expanded(child: CustomInput(label: 'Nombre', hint: 'Nombre', controller: _controllers['nombre']!, focusNode: _focusNodes['nombre']!)),
+                  Expanded(child: CustomInput(label: 'Nombre', hint: 'Tu nombre', controller: _controllers['nombre']!, focusNode: _focusNodes['nombre']!)),
                   const SizedBox(width: 12),
-                  Expanded(child: CustomInput(label: 'Apellido', hint: 'Apellido', controller: _controllers['apellido']!, focusNode: _focusNodes['apellido']!)),
+                  Expanded(child: CustomInput(label: 'Apellido', hint: 'Tu apellido', controller: _controllers['apellido']!, focusNode: _focusNodes['apellido']!)),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               Row(
                 children: [
-                  Expanded(child: CustomInput(label: 'País', hint: 'País', controller: _controllers['pais']!, focusNode: _focusNodes['pais']!)),
+                  Expanded(child: _buildLabelDropdown('País', _selectedCountry, ['Perú'], (val) => setState(() => _selectedCountry = val!))),
                   const SizedBox(width: 12),
-                  Expanded(child: CustomInput(label: 'Ciudad', hint: 'Ciudad', controller: _controllers['ciudad']!, focusNode: _focusNodes['ciudad']!)),
+                  Expanded(child: _buildLabelDropdown('Ciudad', _selectedCity, _peruCities, (val) => setState(() => _selectedCity = val!))),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              const Padding(
-                padding: EdgeInsets.only(left: 4.0, bottom: 6),
-                child: Text('Documento de identidad', style: TextStyle(color: Color(0xFFADADAD), fontSize: 13, fontWeight: FontWeight.w500)),
+              CustomInput(
+                label: 'Teléfono móvil',
+                hint: '999999999',
+                controller: _controllers['telefono']!,
+                focusNode: _focusNodes['telefono']!,
+                isNumber: true,
               ),
+              const SizedBox(height: 16),
+
+              const Text('Documento de identidad', style: TextStyle(color: Color(0xFFADADAD), fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  Container(
-                    height: 50,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(color: const Color(0xFFF7F7F7), borderRadius: BorderRadius.circular(30), border: Border.all(color: const Color(0xFFF3F3F3), width: 1.5)),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedDocType,
-                        icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
-                        items: _docTypes.map((String type) => DropdownMenuItem<String>(value: type, child: Text(type, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)))).toList(),
-                        onChanged: (String? newValue) => setState(() => _selectedDocType = newValue!),
-                      ),
-                    ),
-                  ),
+                  _buildDropdown(_selectedDocType, _docTypes, (val) => setState(() => _selectedDocType = val!)),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Container(
                       height: 50,
-                      decoration: BoxDecoration(color: const Color(0xFFF7F7F7), borderRadius: BorderRadius.circular(30), border: Border.all(color: _focusNodes['documento']!.hasFocus ? const Color(0xFFE0E0E0) : const Color(0xFFF3F3F3), width: 1.5)),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFFF7F7F7),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: const Color(0xFFF3F3F3), width: 1.5)
+                      ),
                       child: TextField(
-                        controller: _controllers['documento'], focusNode: _focusNodes['documento'], keyboardType: TextInputType.number,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black),
-                        decoration: const InputDecoration(hintText: 'Número', hintStyle: TextStyle(color: Color(0xFFADADAD), fontSize: 14), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14)),
+                        controller: _controllers['documento'],
+                        focusNode: _focusNodes['documento'],
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        decoration: const InputDecoration(
+                            hintText: 'Número',
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14)
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              CustomInput(label: 'Bio', hint: 'Soy el CPO de @Inklop y...', controller: _controllers['bio']!, focusNode: _focusNodes['bio']!, isBio: true),
-              const SizedBox(height: 32),
+              CustomInput(
+                  label: 'Biografía',
+                  hint: 'Cuéntanos un poco sobre ti...',
+                  controller: _controllers['bio']!,
+                  focusNode: _focusNodes['bio']!,
+                  isBio: true
+              ),
+              const SizedBox(height: 40),
 
               SizedBox(
-                width: double.infinity, height: 54,
+                width: double.infinity,
+                height: 56,
                 child: FilledButton(
-                  onPressed: _isLoadingPost ? null : _submitData,
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A)),
-                  child: _isLoadingPost ? const CircularProgressIndicator(color: Colors.white) : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  onPressed: (_isLoadingPost || _isUsernameValid != true) ? null : _submitData,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A1A1A),
+                    shape: const StadiumBorder(),
+                  ),
+                  child: _isLoadingPost
+                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Continuar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 24),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabelDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFFADADAD), fontSize: 13, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        _buildDropdown(value, items, onChanged),
+      ],
+    );
+  }
+
+  Widget _buildDropdown(String value, List<String> items, Function(String?) onChanged) {
+    return Container(
+      height: 50,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF7F7F7),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: const Color(0xFFF3F3F3), width: 1.5)
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black54),
+          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(),
+          onChanged: onChanged,
         ),
       ),
     );
