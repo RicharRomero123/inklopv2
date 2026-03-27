@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,12 +12,7 @@ class CreatorProfileScreen extends StatefulWidget {
   final String birthDate;
   final String email;
 
-  const CreatorProfileScreen({
-    super.key,
-    required this.accessToken,
-    required this.birthDate,
-    required this.email,
-  });
+  const CreatorProfileScreen({super.key, required this.accessToken, required this.birthDate, required this.email});
 
   @override
   State<CreatorProfileScreen> createState() => _CreatorProfileScreenState();
@@ -28,124 +22,95 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   final UserApiService _apiService = UserApiService();
   final SecureStorageService _storageService = SecureStorageService();
 
+  // Validador de Username
   Timer? _debounce;
   bool _isCheckingUsername = false;
   bool? _isUsernameValid;
-  bool _isLoadingPost = false;
 
+  // Estados
+  bool _isLoadingPost = false;
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
 
-  String _selectedDocType = 'DNI';
-  String _selectedCountry = 'Perú';
-  String _selectedCity = 'Lima';
-
-  final List<String> _docTypes = ['DNI', 'RUC', 'CE', 'PASAPORTE'];
-  final List<String> _peruCities = [
-    'Lima', 'Arequipa', 'Trujillo', 'Chiclayo', 'Iquitos', 'Piura', 'Cusco', 'Huancayo'
-  ];
-
   final _controllers = {
     'username': TextEditingController(),
-    'nombre': TextEditingController(),
-    'apellido': TextEditingController(),
-    'documento': TextEditingController(),
-    'telefono': TextEditingController(),
+    'names': TextEditingController(),
+    'lastNames': TextEditingController(),
+    'document': TextEditingController(),
+    'phone': TextEditingController(),
     'bio': TextEditingController(),
   };
 
-  final _focusNodes = {
-    'username': FocusNode(),
-    'nombre': FocusNode(),
-    'apellido': FocusNode(),
-    'documento': FocusNode(),
-    'telefono': FocusNode(),
-    'bio': FocusNode(),
-  };
-
   @override
-  void initState() {
-    super.initState();
-    _focusNodes.forEach((k, v) => v.addListener(() => setState(() {})));
+  void dispose() {
+    _debounce?.cancel();
+    _controllers.values.forEach((c) => c.dispose());
+    super.dispose();
   }
 
+  // --- LÓGICA TIPO INSTAGRAM ---
   void _onUsernameChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    if (value.isEmpty) {
-      setState(() { _isUsernameValid = null; _isCheckingUsername = false; });
-      return;
-    }
+    if (value.isEmpty) { setState(() => _isUsernameValid = null); return; }
 
-    setState(() => _isCheckingUsername = true);
-    _debounce = Timer(const Duration(milliseconds: 600), () async {
-      final result = await _apiService.checkUsername(value, widget.accessToken);
+    setState(() {
+      _isCheckingUsername = true;
+      _isUsernameValid = null;
+    });
+
+    _debounce = Timer(const Duration(milliseconds: 700), () async {
+      final res = await _apiService.checkUsername(value, widget.accessToken);
       if (mounted) {
         setState(() {
-          _isUsernameValid = (result['valid'] == true && result['exists'] == false);
+          // Disponible si valid: true y exists: false
+          _isUsernameValid = (res['valid'] == true && res['exists'] == false);
           _isCheckingUsername = false;
         });
       }
     });
   }
 
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (image != null) setState(() => _profileImage = File(image.path));
-    } catch (e) {
-      debugPrint("Error seleccionando imagen: $e");
-    }
-  }
-
+  // --- SUBIDA Y REGISTRO ---
   Future<void> _submitData() async {
-    if (_isUsernameValid != true) return;
-
-    if (_profileImage == null) {
-      _showSnackBar('Por favor, selecciona una foto de perfil.', Colors.orange);
-      return;
-    }
-
-    if (_controllers.values.any((c) => c.text.trim().isEmpty)) {
-      _showSnackBar('Por favor, completa todos los campos.', Colors.orange);
-      return;
-    }
+    if (_isUsernameValid != true) { _showSnackBar('Nombre de usuario no disponible', Colors.red); return; }
+    if (_profileImage == null) { _showSnackBar('La foto es obligatoria', Colors.orange); return; }
 
     setState(() => _isLoadingPost = true);
 
     try {
+      // 1. Obtener Firma y Estructura (NUEVO)
+      final responseData = await _apiService.getCloudinarySignature(widget.accessToken);
+      if (responseData == null) throw Exception("Error al obtener datos de subida del backend");
+
+      // 2. Subir a Cloudinary (Usa la URL y el body del JSON)
+      final imageUrl = await _apiService.uploadToCloudinary(_profileImage!, responseData);
+      if (imageUrl == null) throw Exception("Fallo al subir imagen a Cloudinary");
+
+      // 3. Payload Final
       final payload = {
-        "real_name": '${_controllers['nombre']!.text} ${_controllers['apellido']!.text}'.trim(),
+        "names": _controllers['names']!.text.trim(),
+        "lastNames": _controllers['lastNames']!.text.trim(),
         "username": _controllers['username']!.text.trim(),
-        "email": widget.email,
-        "typeDocument": _selectedDocType,
-        "document": _controllers['documento']!.text.trim(),
-        "country": _selectedCountry,
-        "city": _selectedCity,
-        "phoneNumber": _controllers['telefono']!.text.trim(),
+        "typeDocument": "DNI",
+        "document": _controllers['document']!.text.trim(),
+        "country": "Perú",
+        "city": "Lima",
+        "phoneNumber": _controllers['phone']!.text.trim(),
         "birthDate": widget.birthDate,
-        "description": _controllers['bio']!.text.trim()
+        "description": _controllers['bio']!.text.trim(),
+        "imageUrl": imageUrl
       };
 
-      final success = await _apiService.registerCreatorProfile(
-        payload: payload,
-        token: widget.accessToken,
-        imageFile: _profileImage,
-      );
+      // 4. Registro en Inklop
+      final success = await _apiService.registerCreatorProfile(payload: payload, token: widget.accessToken);
 
-      if (success) {
+      if (success && mounted) {
         await _storageService.saveToken(widget.accessToken);
-        if (mounted) {
-          // 🚀 2. CAMBIO AQUÍ: Ahora navegamos a SocialMediaLinkScreen
-          Navigator.pushAndRemoveUntil(
+        Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(
-              builder: (_) => SocialMediaLinkScreen(accessToken: widget.accessToken),
-            ),
-                (route) => false,
-          );
-        }
-      } else {
-        throw Exception('Error 400: El servidor rechazó los datos. Revisa el log.');
+            MaterialPageRoute(builder: (_) => SocialMediaLinkScreen(accessToken: widget.accessToken)),
+                (r) => false
+        );
       }
     } catch (e) {
       if (mounted) _showSnackBar(e.toString(), Colors.red);
@@ -154,191 +119,57 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     }
   }
 
-  void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
-  }
+  void _showSnackBar(String m, Color c) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
 
   @override
   Widget build(BuildContext context) {
-    Widget? usernameStatusIcon = _isCheckingUsername
-        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-        : (_isUsernameValid == true
-        ? const Icon(Icons.check_circle, color: Colors.green)
-        : (_isUsernameValid == false ? const Icon(Icons.cancel, color: Colors.red) : null));
+    Widget? userIcon = _isCheckingUsername
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+        : (_isUsernameValid == true ? const Icon(Icons.check_circle, color: Colors.green) : (_isUsernameValid == false ? const Icon(Icons.cancel, color: Colors.red) : null));
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: GestureDetector(
-                  onTap: _pickImage,
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: const Color(0xFFF3F3F3),
-                        backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                        child: _profileImage == null
-                            ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                            : null,
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]),
-                        child: const Icon(Icons.edit, size: 16, color: Colors.black),
-                      ),
-                    ],
-                  ),
-                ),
+      appBar: AppBar(backgroundColor: Colors.white, elevation: 0, leading: const BackButton(color: Colors.black)),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () async {
+                final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+                if (img != null) setState(() => _profileImage = File(img.path));
+              },
+              child: CircleAvatar(
+                radius: 50,
+                backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                child: _profileImage == null ? const Icon(Icons.camera_alt, color: Colors.grey) : null,
               ),
-              const SizedBox(height: 24),
-              const Center(child: Text('Completa Tu Perfil', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
-              const Center(child: Text('Date a conocer en la comunidad Inklop', style: TextStyle(fontSize: 14, color: Colors.grey))),
-              const SizedBox(height: 32),
-
-              CustomInput(
-                label: 'Nombre de usuario',
-                hint: '@username',
-                controller: _controllers['username']!,
-                focusNode: _focusNodes['username']!,
-                onChanged: _onUsernameChanged,
-                suffixIcon: Padding(padding: const EdgeInsets.all(12), child: usernameStatusIcon),
+            ),
+            const SizedBox(height: 32),
+            CustomInput(label: 'Username', hint: '@user', controller: _controllers['username']!, focusNode: FocusNode(), onChanged: _onUsernameChanged, suffixIcon: Padding(padding: const EdgeInsets.all(12), child: userIcon)),
+            if (_isUsernameValid == false) const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 12), child: Text('No disponible o inválido', style: TextStyle(color: Colors.red, fontSize: 12)))),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: CustomInput(label: 'Nombre', hint: 'Nombres', controller: _controllers['names']!, focusNode: FocusNode())),
+              const SizedBox(width: 12),
+              Expanded(child: CustomInput(label: 'Apellido', hint: 'Apellidos', controller: _controllers['lastNames']!, focusNode: FocusNode())),
+            ]),
+            const SizedBox(height: 16),
+            CustomInput(label: 'Teléfono móvil', hint: '999999999', controller: _controllers['phone']!, focusNode: FocusNode(), isNumber: true),
+            const SizedBox(height: 16),
+            CustomInput(label: 'DNI', hint: 'Número', controller: _controllers['document']!, focusNode: FocusNode(), isNumber: true),
+            const SizedBox(height: 16),
+            CustomInput(label: 'Bio', hint: 'Sobre ti...', controller: _controllers['bio']!, focusNode: FocusNode(), isBio: true),
+            const SizedBox(height: 40),
+            SizedBox(
+              width: double.infinity, height: 56,
+              child: FilledButton(
+                onPressed: (_isLoadingPost || _isUsernameValid != true) ? null : _submitData,
+                style: FilledButton.styleFrom(backgroundColor: Colors.black, shape: const StadiumBorder()),
+                child: _isLoadingPost ? const CircularProgressIndicator(color: Colors.white) : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-              if (_isUsernameValid == false)
-                const Padding(padding: EdgeInsets.only(left: 8, top: 4), child: Text('Usuario no disponible', style: TextStyle(color: Colors.red, fontSize: 12))),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(child: CustomInput(label: 'Nombre', hint: 'Tu nombre', controller: _controllers['nombre']!, focusNode: _focusNodes['nombre']!)),
-                  const SizedBox(width: 12),
-                  Expanded(child: CustomInput(label: 'Apellido', hint: 'Tu apellido', controller: _controllers['apellido']!, focusNode: _focusNodes['apellido']!)),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(child: _buildLabelDropdown('País', _selectedCountry, ['Perú'], (val) => setState(() => _selectedCountry = val!))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildLabelDropdown('Ciudad', _selectedCity, _peruCities, (val) => setState(() => _selectedCity = val!))),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              CustomInput(
-                label: 'Teléfono móvil',
-                hint: '999999999',
-                controller: _controllers['telefono']!,
-                focusNode: _focusNodes['telefono']!,
-                isNumber: true,
-              ),
-              const SizedBox(height: 16),
-
-              const Text('Documento de identidad', style: TextStyle(color: Color(0xFFADADAD), fontSize: 13, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildDropdown(_selectedDocType, _docTypes, (val) => setState(() => _selectedDocType = val!)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Container(
-                      height: 50,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFF7F7F7),
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: const Color(0xFFF3F3F3), width: 1.5)
-                      ),
-                      child: TextField(
-                        controller: _controllers['documento'],
-                        focusNode: _focusNodes['documento'],
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                            hintText: 'Número',
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 14)
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              CustomInput(
-                  label: 'Biografía',
-                  hint: 'Cuéntanos un poco sobre ti...',
-                  controller: _controllers['bio']!,
-                  focusNode: _focusNodes['bio']!,
-                  isBio: true
-              ),
-              const SizedBox(height: 40),
-
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: FilledButton(
-                  onPressed: (_isLoadingPost || _isUsernameValid != true) ? null : _submitData,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    shape: const StadiumBorder(),
-                  ),
-                  child: _isLoadingPost
-                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Continuar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLabelDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(color: Color(0xFFADADAD), fontSize: 13, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 8),
-        _buildDropdown(value, items, onChanged),
-      ],
-    );
-  }
-
-  Widget _buildDropdown(String value, List<String> items, Function(String?) onChanged) {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-          color: const Color(0xFFF7F7F7),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: const Color(0xFFF3F3F3), width: 1.5)
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black54),
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(),
-          onChanged: onChanged,
+            )
+          ],
         ),
       ),
     );

@@ -2,148 +2,141 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
-import 'package:http_parser/http_parser.dart'; // NECESARIO
 
 class UserApiService {
+  // 🔑 Función para imprimir el token en consola siempre (Corregido el nombre)
+  void _printDebugToken(String token) {
+    print('\n======================================================');
+    print('🔑 [DEBUG] BEARER TOKEN:');
+    print('Bearer $token');
+    print('======================================================\n');
+  }
 
-  // --- 1. CONSULTAR USERNAME (GET) ---
+  // --- 1. VALIDAR DISPONIBILIDAD DE USERNAME ---
+  // Según tu Swagger: { "exists": false, "valid": true } es el estado disponible.
   Future<Map<String, dynamic>> checkUsername(String username, String token) async {
+    _printDebugToken(token);
     try {
-      // 🚨 IMPRESIÓN DEL TOKEN PARA PROBAR EN SWAGGER 🚨
-      print('\n======================================================');
-      print('🔑 BEARER TOKEN OBTENIDO (Cópialo para usar en Swagger):');
-      print(token);
-      print('======================================================\n');
-
       final url = Uri.parse('${AppConstants.apiBaseUrl}/users/check-username/$username');
-
-      final response = await http.get(
-          url,
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/json',
-          }
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        print('🔍 Respuesta API Username ($username): $data');
-        return data;
-      }
-
-      print('❌ Error API Username. Status: ${response.statusCode}');
-      return {'valid': false, 'exists': false};
-    } catch (e) {
-      print('❌ Error de red al consultar Username: $e');
-      return {'valid': false, 'exists': false};
-    }
-  }
-
-  // --- 2. ENVIAR PERFIL COMPLETO (POST MULTIPART) ---
-  Future<bool> registerCreatorProfile({
-    required Map<String, dynamic> payload,
-    required String token,
-    File? imageFile
-  }) async {
-    try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me/creator-profile');
-      var request = http.MultipartRequest('POST', url);
-
-      request.headers.addAll({
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      });
-
-      // Enviamos el objeto 'data' como una parte JSON
-      request.files.add(http.MultipartFile.fromString(
-        'data',
-        jsonEncode(payload),
-        contentType: MediaType('application', 'json'),
-      ));
-
-      // Enviamos el archivo 'file'
-      if (imageFile != null) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'file',
-          imageFile.path,
-          contentType: MediaType('image', 'jpeg'),
-        ));
-      } else {
-        throw Exception('La foto de perfil es obligatoria');
-      }
-
-      print('🚀 Enviando Registro a: $url');
-      print('📦 Payload enviado: ${jsonEncode(payload)}');
-
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-
-      print('📥 Respuesta (Status ${response.statusCode}): ${response.body}');
-
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      print('❌ Error en registerCreatorProfile: $e');
-      return false;
-    }
-  }
-
-  // --- 4. SUBIR FOTO DE PERFIL (PUT - Multipart) ---
-  Future<bool> uploadProfileImage(String imagePath, String token) async {
-    try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me/image');
-      print('\n📸 Subiendo imagen de perfil a: $url');
-
-      // Creamos la petición Multipart para subir archivos
-      var request = http.MultipartRequest('PUT', url);
-
-      // Agregamos el Token
-      request.headers['Authorization'] = 'Bearer $token';
-
-      // Agregamos el archivo al campo 'file' (como lo pide tu Swagger)
-      request.files.add(await http.MultipartFile.fromPath('file', imagePath));
-
-      // Enviamos la petición
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-
-      print('📥 Respuesta PUT Imagen (Status ${response.statusCode}): ${response.body}\n');
-
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      print('❌ Error al subir imagen de perfil: $e');
-      return false;
-    }
-  }
-
-  // --- 3. VERIFICAR SI EL PERFIL YA ESTÁ COMPLETO (GET) ---
-  Future<bool> isProfileCompleted(String token) async {
-    try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me');
-
-      print('🔍 Verificando si el usuario ya existe en: $url');
 
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
+        'accept': '*/*',
       });
 
+      print('📡 Check Username ($username) Status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final isCompleted = data['profileCompleted'] == true;
-
-        print('✅ Usuario encontrado en BD: ${data['username'] ?? 'Sin username'}');
-        print('🚦 ¿Perfil completado?: $isCompleted');
-
-        return isCompleted;
+        return jsonDecode(response.body);
+      } else {
+        print('❌ Error Check Username: ${response.body}');
+        return {'valid': false, 'exists': true};
       }
-
-      // Si el servidor responde 404, 500 u otro error
-      print('⚠️ El usuario aún no existe en BD o hubo error (Status: ${response.statusCode})');
-      return false;
-
     } catch (e) {
-      print('❌ Error de red al verificar perfil: $e');
-      return false; // Ante la duda o error de red, asumimos que no está completo
+      print('❌ Excepción en Check Username: $e');
+      return {'valid': false, 'exists': true};
     }
+  }
+
+  // --- 2. OBTENER DATOS DE FIRMA (NUEVA ESTRUCTURA) ---
+  Future<Map<String, dynamic>?> getCloudinarySignature(String token) async {
+    _printDebugToken(token);
+    try {
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/files/signature');
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'accept': '*/*',
+      });
+
+      print('📡 GET SIGNATURE STATUS: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('✅ ESTRUCTURA RECIBIDA: $data');
+        return data;
+      }
+    } catch (e) {
+      print("❌ ERROR SIGNATURE: $e");
+    }
+    return null;
+  }
+
+  // --- 3. SUBIR A CLOUDINARY (DINÁMICO) ---
+  Future<String?> uploadToCloudinary(File imageFile, Map<String, dynamic> sigData) async {
+    try {
+      final String uploadUrl = sigData['url'];
+      final Map<String, dynamic> bodyFields = sigData['body'];
+
+      var request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
+
+      // MAPEADO DINÁMICO de todos los campos del body (api_key, signature, folder, etc.)
+      bodyFields.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+
+      print('☁️ SUBIENDO A CLOUDINARY... URL: $uploadUrl');
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final resData = jsonDecode(response.body);
+        print('✅ URL GENERADA: ${resData['secure_url']}');
+        return resData['secure_url'];
+      } else {
+        print('❌ ERROR CLOUDINARY: ${response.body}');
+      }
+    } catch (e) {
+      print("❌ EXCEPCIÓN CLOUDINARY: $e");
+    }
+    return null;
+  }
+
+  // --- 4. REGISTRAR PERFIL DE CREADOR ---
+  Future<bool> registerCreatorProfile({
+    required Map<String, dynamic> payload,
+    required String token,
+  }) async {
+    _printDebugToken(token);
+    try {
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me/creator-profile');
+
+      print('📤 Enviando JSON al Backend: ${jsonEncode(payload)}');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'accept': '*/*',
+        },
+        body: jsonEncode(payload),
+      );
+
+      print('📥 Status Registro: ${response.statusCode}');
+      print('📥 Respuesta Registro: ${response.body}');
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print("❌ Error en POST Registro: $e");
+      return false;
+    }
+  }
+
+  // --- 5. VERIFICAR SI EL PERFIL YA EXISTE ---
+  Future<bool> isProfileCompleted(String token) async {
+    _printDebugToken(token);
+    try {
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/users/me');
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'accept': '*/*',
+      });
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['profileCompleted'] == true;
+      }
+    } catch (e) {
+      print("❌ Error verificando perfil: $e");
+    }
+    return false;
   }
 }

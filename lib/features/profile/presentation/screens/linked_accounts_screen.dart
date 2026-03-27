@@ -32,6 +32,18 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     });
   }
 
+  // Helper para mostrar iconos genéricos mientras no tienes los PNGs
+  Widget _getPlatformIcon(String platform) {
+    switch (platform.toUpperCase()) {
+      case 'TIKTOK':
+        return const Icon(Icons.music_note, color: Colors.black, size: 24);
+      case 'INSTAGRAM':
+        return const Icon(Icons.camera_alt, color: Colors.pink, size: 24);
+      default:
+        return const Icon(Icons.link, color: Colors.blue, size: 24);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final connected = _allAccounts.where((s) => s['isVerified'] == true).toList();
@@ -49,17 +61,28 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  const Text('Cuentas Conectadas', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Cuentas Conectadas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),
+                  if (connected.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text('No hay cuentas verificadas', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ),
                   ...connected.map((acc) => _buildAccountCard(acc)),
 
                   const SizedBox(height: 24),
-                  const Text('Pendiente a Verificación', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Pendiente a Verificación', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),
+                  if (pending.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text('No hay verificaciones pendientes', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ),
                   ...pending.map((acc) => _buildPendingCard(acc)),
 
-                  const SizedBox(height: 24),
-                  const Text('Conectar Cuentas', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 32),
+                  const Text('Conectar Cuentas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 12),
                   _buildConnectRow('TikTok'),
                   _buildConnectRow('Instagram'),
                 ],
@@ -79,7 +102,10 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       ),
       child: Row(
         children: [
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20)),
+          IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20)
+          ),
           Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
@@ -90,17 +116,24 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(border: Border.all(color: Colors.grey[200]!), borderRadius: BorderRadius.circular(15)),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF7F7F7),
+          border: Border.all(color: Colors.grey[200]!),
+          borderRadius: BorderRadius.circular(15)
+      ),
       child: Row(
         children: [
-          Image.asset('assets/images/${acc['platform'].toLowerCase()}_logo.png', width: 24),
+          _getPlatformIcon(acc['platform']), // Icono genérico
           const SizedBox(width: 12),
           Text(acc['nickname'] ?? 'Usuario', style: const TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
-          IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
-            await _socialApi.deleteAccount(acc['id'], widget.accessToken);
-            _load();
-          }),
+          IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: () async {
+                await _socialApi.deleteAccount(acc['id'], widget.accessToken);
+                _load();
+              }
+          ),
         ],
       ),
     );
@@ -112,31 +145,49 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
       builder: (context, setInternalState) => Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey[200]!), borderRadius: BorderRadius.circular(15)),
+        decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[200]!),
+            borderRadius: BorderRadius.circular(15)
+        ),
         child: Column(
           children: [
             Row(
               children: [
-                Image.asset('assets/images/${acc['platform'].toLowerCase()}_logo.png', width: 24),
+                _getPlatformIcon(acc['platform']), // Icono genérico
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(acc['platform'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const Text('Sin verificar', style: TextStyle(color: Colors.orange, fontSize: 10)),
+                  const Text('Sin verificar', style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
                 ]),
                 const Spacer(),
-                Text(acc['verificationCode'], style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                IconButton(icon: const Icon(Icons.copy, size: 18), onPressed: () {
-                  Clipboard.setData(ClipboardData(text: acc['verificationCode']));
-                }),
-                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.purple), onPressed: () async {
-                  await _socialApi.deleteAccount(acc['id'], widget.accessToken);
-                  _load();
-                }),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                  child: Text(
+                      acc['verificationCode'] ?? '---',
+                      style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 13)
+                  ),
+                ),
+                IconButton(
+                    icon: const Icon(Icons.copy, size: 18, color: Colors.blueGrey),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: acc['verificationCode'] ?? ''));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Código copiado'), duration: Duration(seconds: 1)));
+                    }
+                ),
+                IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    onPressed: () async {
+                      await _socialApi.deleteAccount(acc['id'], widget.accessToken);
+                      _load();
+                    }
+                ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
+              height: 45,
               child: FilledButton(
                 onPressed: isVerifying ? null : () async {
                   setInternalState(() => isVerifying = true);
@@ -145,11 +196,16 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
                     _load();
                   } else {
                     setInternalState(() => isVerifying = false);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aún no se detecta el código')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aún no se detecta el código en tu perfil')));
                   }
                 },
-                style: FilledButton.styleFrom(backgroundColor: Colors.black, shape: const StadiumBorder()),
-                child: isVerifying ? const CircularProgressIndicator(color: Colors.white) : const Text('Verificar'),
+                style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                ),
+                child: isVerifying
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Verificar ahora', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             )
           ],
@@ -160,16 +216,24 @@ class _LinkedAccountsScreenState extends State<LinkedAccountsScreen> {
 
   Widget _buildConnectRow(String platform) {
     return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(border: Border.all(color: Colors.grey[200]!), borderRadius: BorderRadius.circular(15)),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[200]!),
+          borderRadius: BorderRadius.circular(15)
+      ),
       child: Row(
         children: [
-          Image.asset('assets/images/${platform.toLowerCase()}_logo.png', width: 24),
+          _getPlatformIcon(platform), // Icono genérico
           const SizedBox(width: 12),
           Text(platform, style: const TextStyle(fontWeight: FontWeight.bold)),
           const Spacer(),
-          FilledButton(onPressed: () {}, style: FilledButton.styleFrom(backgroundColor: Colors.black), child: const Text('Conectar')),
+          TextButton(
+              onPressed: () {
+                // Aquí iría tu lógica de abrir el modal para pegar el link
+              },
+              child: const Text('Conectar', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue))
+          ),
         ],
       ),
     );
