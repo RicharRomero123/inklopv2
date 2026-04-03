@@ -35,26 +35,57 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // --- WIDGET SKELETON (CARGA) ---
-  Widget _buildSkeleton({required double width, required double height, double borderRadius = 12}) {
+  String _formatJoinDate(String? isoDate) {
+    if (isoDate == null) return "Fecha desconocida";
+    try {
+      final DateTime date = DateTime.parse(isoDate);
+      final List<String> months = [
+        'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+        'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
+      ];
+      return "${date.day} ${months[date.month - 1]}";
+    } catch (e) {
+      return "Error de fecha";
+    }
+  }
+
+  String _getPlatformIcon(String platform) {
+    switch (platform.toLowerCase()) {
+      case 'tiktok':
+        return 'assets/images/profile_tiktok.png';
+      case 'instagram':
+        return 'assets/images/profile_ig.png';
+      default:
+        return 'assets/images/ic_profile.png';
+    }
+  }
+
+  Widget _buildSkeleton({
+    required double width,
+    required double height,
+    double borderRadius = 12,
+  }) {
     return Container(
-      width: width, height: height,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(borderRadius)
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(borderRadius),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Si no hay datos y no está cargando, mostramos error
     if (!_isLoading && _userData == null) {
-      return const Scaffold(body: Center(child: Text("Error al cargar perfil")));
+      return const Scaffold(
+        body: Center(child: Text("Error al cargar perfil")),
+      );
     }
 
     final List allSocials = _userData?['socialMedias'] ?? [];
-    final verifiedAccounts = allSocials.where((s) => s['isVerified'] == true).toList();
+    final verifiedAccounts =
+    allSocials.where((s) => s['isVerified'] == true).toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -63,138 +94,237 @@ class _ProfilePageState extends State<ProfilePage> {
         color: Colors.black,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 60),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER: FOTO CUADRADA REDONDEADA Y STATS ---
+
+              // ── HEADER: FOTO | STATS + BOTONES ───────────────────────
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Foto rectangular con bordes redondeados
                   _isLoading
-                      ? _buildSkeleton(width: 95, height: 95, borderRadius: 28)
+                      ? _buildSkeleton(width: 88, height: 100, borderRadius: 16)
                       : Container(
-                    width: 95, height: 95,
+                    width: 88,
+                    height: 100,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(25),
                       image: _userData?['avatarUrl'] != null
-                          ? DecorationImage(image: NetworkImage(_userData!['avatarUrl']), fit: BoxFit.cover)
+                          ? DecorationImage(
+                        image: NetworkImage(_userData!['avatarUrl']),
+                        fit: BoxFit.cover,
+                      )
                           : null,
-                      color: Colors.grey[100],
+                      color: Colors.grey[200],
                     ),
                     child: _userData?['avatarUrl'] == null
-                        ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                        ? const Icon(Icons.person,
+                        size: 42, color: Colors.grey)
                         : null,
                   ),
-                  const Spacer(),
-                  _buildStatColumn('12', 'Campañas'),
-                  _buildStatColumn(
-                      _isLoading ? '...' : '${_userData?['wallet']['balancePEN']}',
-                      'Saldo (S/)'
-                  ),
-                  _buildStatColumn('s/1.5k', 'Ganancias'),
-                ],
-              ),
-              const SizedBox(height: 18),
 
-              // --- BOTONES: EDITAR PERFIL Y CONFIGURACIÓN ---
-              Row(
-                children: [
+                  const SizedBox(width: 16),
+
+                  // Columna derecha: Stats arriba, Botones abajo
                   Expanded(
                     child: SizedBox(
-                      height: 44,
-                      child: _isLoading
-                          ? _buildSkeleton(width: double.infinity, height: 44, borderRadius: 22)
-                          : FilledButton(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(
-                            builder: (_) => EditProfileScreen(accessToken: widget.accessToken, initialData: _userData!)
-                        )).then((_) => _loadProfile()),
-                        style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF1C1C1E),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22))
-                        ),
-                        child: const Text('Editar Perfil', style: TextStyle(fontWeight: FontWeight.w600)),
+                      height: 100,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Stats
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildStatColumn('12', 'Campañas'),
+                              _buildStatColumn('15k', 'Visualizaciones'),
+                              _buildStatColumn('s/1.5k', 'Ganancias'),
+                            ],
+                          ),
+
+                          // Botones Editar + Settings
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 40,
+                                  child: _isLoading
+                                      ? _buildSkeleton(
+                                    width: double.infinity,
+                                    height: 40,
+                                    borderRadius: 20,
+                                  )
+                                      : FilledButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => EditProfileScreen(
+                                          accessToken: widget.accessToken,
+                                          initialData: _userData!,
+                                        ),
+                                      ),
+                                    ).then((_) => _loadProfile()),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                      const Color(0xFF1C1C1E),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(20),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Editar Perfil',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _isLoading
+                                  ? _buildSkeleton(
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 20)
+                                  : SizedBox(
+                                width: 40,
+                                height: 40,
+                                child: FilledButton(
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => SettingsScreen(
+                                          accessToken:
+                                          widget.accessToken),
+                                    ),
+                                  ).then((_) => _loadProfile()),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor:
+                                    const Color(0xFF1C1C1E),
+                                    padding: EdgeInsets.zero,
+                                    shape: const CircleBorder(),
+                                  ),
+                                  child: const Icon(Icons.settings,
+                                      color: Colors.white, size: 18),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                ],
+              ),
+
+              const SizedBox(height: 18),
+
+              // ── NOMBRE Y USERNAME ─────────────────────────────────────
+              _isLoading
+                  ? _buildSkeleton(width: 200, height: 26)
+                  : Text(
+                '${_userData?['names']} ${_userData?['lastNames']}',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 3),
+              _isLoading
+                  ? _buildSkeleton(width: 110, height: 16)
+                  : Text(
+                '@${_userData?['username']}',
+                style: const TextStyle(
+                  color: Color(0xFF8E8E93),
+                  fontSize: 15,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── DESCRIPCIÓN ───────────────────────────────────────────
+              _isLoading
+                  ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSkeleton(
+                      width: double.infinity, height: 15),
+                  const SizedBox(height: 5),
+                  _buildSkeleton(width: 220, height: 15),
+                ],
+              )
+                  : Text(
+                _userData?['description'] ?? 'Sin descripción aún...',
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.45,
+                  color: Color(0xFF1C1C1E),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // ── UBICACIÓN Y FECHA ─────────────────────────────────────
+              Row(
+                children: [
+                  const Icon(Icons.public,
+                      size: 16, color: Color(0xFF8E8E93)),
+                  const SizedBox(width: 5),
                   _isLoading
-                      ? _buildSkeleton(width: 44, height: 44, borderRadius: 22)
-                      : Container(
-                    height: 44, width: 44,
-                    decoration: const BoxDecoration(color: Color(0xFF1C1C1E), shape: BoxShape.circle),
-                    child: IconButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => SettingsScreen(accessToken: widget.accessToken)
-                      )).then((_) => _loadProfile()),
-                      icon: const Icon(Icons.settings, color: Colors.white, size: 20),
+                      ? _buildSkeleton(width: 70, height: 13)
+                      : Text(
+                    '${_userData?['city']}, ${_userData?['country']}',
+                    style: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  const Icon(Icons.calendar_month_outlined,
+                      size: 16, color: Color(0xFF8E8E93)),
+                  const SizedBox(width: 5),
+                  _isLoading
+                      ? _buildSkeleton(width: 90, height: 13)
+                      : Text(
+                    'Se unió el ${_formatJoinDate(_userData?['createdAt'])}',
+                    style: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 13,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
 
-              // --- NOMBRE Y USERNAME ---
-              _isLoading
-                  ? _buildSkeleton(width: 200, height: 28)
-                  : Text(
-                  '${_userData?['names']} ${_userData?['lastNames']}',
-                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: -0.5)
-              ),
-              const SizedBox(height: 4),
-              _isLoading
-                  ? _buildSkeleton(width: 120, height: 18)
-                  : Text('@${_userData?['username']}', style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16)),
+              const SizedBox(height: 30),
 
-              const SizedBox(height: 14),
-
-              // --- DESCRIPCIÓN ---
-              _isLoading
-                  ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                _buildSkeleton(width: double.infinity, height: 16),
-                const SizedBox(height: 6),
-                _buildSkeleton(width: 250, height: 16),
-              ])
-                  : Text(
-                  _userData?['description'] ?? 'Sin descripción aún...',
-                  style: const TextStyle(fontSize: 15, height: 1.4, color: Color(0xFF3A3A3C))
-              ),
-
-              const SizedBox(height: 18),
-
-              // --- UBICACIÓN Y FECHA (ICONOS GRISES) ---
-              Row(
-                children: [
-                  const Icon(Icons.public, size: 18, color: Color(0xFF8E8E93)),
-                  const SizedBox(width: 6),
-                  _isLoading ? _buildSkeleton(width: 80, height: 14) : Text('${_userData?['city']}, ${_userData?['country']}', style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
-                  const SizedBox(width: 20),
-                  const Icon(Icons.calendar_month_outlined, size: 18, color: Color(0xFF8E8E93)),
-                  const SizedBox(width: 6),
-                  _isLoading ? _buildSkeleton(width: 100, height: 14) : const Text('Se unió el 21 Nov', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
-                ],
-              ),
-              const SizedBox(height: 35),
-
-              // --- SECCIÓN REDES VINCULADAS ---
-              const Text('Redes vinculadas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 18),
-
+              // ── REDES VINCULADAS ──────────────────────────────────────
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
                     if (_isLoading)
-                      ...List.generate(3, (i) => Padding(
-                        padding: const EdgeInsets.only(right: 20),
-                        child: _buildSkeleton(width: 65, height: 85, borderRadius: 18),
-                      ))
+                      ...List.generate(
+                        3,
+                            (i) => Padding(
+                          padding: const EdgeInsets.only(right: 22),
+                          child: _buildSkeleton(
+                              width: 68, height: 90, borderRadius: 16),
+                        ),
+                      )
                     else ...[
-                      ...verifiedAccounts.map((social) => _buildSocialItem(
-                        platform: social['platform'],
-                        nickname: social['nickname'] ?? 'user',
-                      )),
+                      ...verifiedAccounts.map(
+                            (social) => _buildSocialItem(
+                          platform: social['platform'],
+                          nickname: social['nickname'] ?? 'user',
+                        ),
+                      ),
                       _buildAddAccount(context),
-                    ]
+                    ],
                   ],
                 ),
               ),
@@ -205,62 +335,96 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Columnas de estadísticas
+  // ── STAT COLUMN ───────────────────────────────────────────────────────────
   Widget _buildStatColumn(String value, String label) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Column(
-        children: [
-          Text(value, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-          Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF8E8E93))),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -0.2,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF8E8E93),
+          ),
+        ),
+      ],
     );
   }
 
-  // Ítem de Red Social (Squircle gris)
-  Widget _buildSocialItem({required String platform, required String nickname}) {
+  // ── SOCIAL ITEM ───────────────────────────────────────────────────────────
+  Widget _buildSocialItem({
+    required String platform,
+    required String nickname,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(right: 20),
+      padding: const EdgeInsets.only(right: 22),
       child: Column(
         children: [
           Container(
-            width: 68, height: 68,
+            width: 68,
+            height: 68,
             decoration: BoxDecoration(
-              color: const Color(0xFFF2F2F7),
+              color: const Color(0xFF1C1C1E),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Center(
-              child: platform.toLowerCase() == 'tiktok'
-                  ? const Icon(Icons.music_note, size: 32, color: Colors.black)
-                  : const Icon(Icons.camera_alt, size: 30, color: Colors.black),
+              child: Image.asset(
+                _getPlatformIcon(platform),
+                width: 30,
+                height: 30,
+                color: Colors.white,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text('@$nickname', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 7),
+          Text(
+            '@$nickname',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // Botón Agregar Cuenta
+  // ── BOTÓN AGREGAR CUENTA ──────────────────────────────────────────────────
   Widget _buildAddAccount(BuildContext context) {
     return InkWell(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-          builder: (_) => SocialMediaLinkScreen(accessToken: widget.accessToken)
-      )).then((_) => _loadProfile()),
+      borderRadius: BorderRadius.circular(18),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              SocialMediaLinkScreen(accessToken: widget.accessToken),
+        ),
+      ).then((_) => _loadProfile()),
       child: Column(
         children: [
           Container(
-            width: 68, height: 68,
+            width: 68,
+            height: 68,
             decoration: BoxDecoration(
               color: const Color(0xFFE5E5EA),
               borderRadius: BorderRadius.circular(18),
             ),
-            child: const Icon(Icons.add, size: 35, color: Colors.white),
+            child: const Icon(Icons.add, size: 32, color: Colors.white),
           ),
-          const SizedBox(height: 8),
-          const Text('Agregar', style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93))),
+          const SizedBox(height: 7),
+          const Text(
+            'Agregar cuenta',
+            style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
+          ),
         ],
       ),
     );

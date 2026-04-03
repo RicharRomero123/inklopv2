@@ -91,7 +91,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
         "names": _controllers['names']!.text.trim(),
         "lastNames": _controllers['lastNames']!.text.trim(),
         "username": _controllers['username']!.text.trim(),
-        "typeDocument": "DNI",
+        "documentType": "DNI",
         "document": _controllers['document']!.text.trim(),
         "country": "Perú",
         "city": "Lima",

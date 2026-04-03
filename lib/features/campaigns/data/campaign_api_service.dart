@@ -15,7 +15,7 @@ class CampaignApiService {
   Future<List<Campaign>?> getActiveCampaigns(String token) async {
     _printDebugToken(token);
     try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/api/v1/campaign/active');
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/campaign/active');
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
         'accept': '*/*',
@@ -35,7 +35,7 @@ class CampaignApiService {
   Future<Map<String, dynamic>?> getAiScript(int campaignId, String token) async {
     _printDebugToken(token);
     try {
-      final url = Uri.parse('${AppConstants.apiBaseUrl}/api/v1/campaign/ai/script/campaignId/$campaignId');
+      final url = Uri.parse('${AppConstants.apiBaseUrl}/campaign/ai/script/campaignId/$campaignId');
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $token',
         'accept': '*/*',

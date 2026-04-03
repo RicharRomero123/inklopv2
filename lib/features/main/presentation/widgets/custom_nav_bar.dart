@@ -13,29 +13,92 @@ class CustomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      height: 90,
+      alignment: Alignment.center,
       decoration: const BoxDecoration(
-        color: Color(0xFF0D0214), // Negro/Morado muy oscuro del diseño
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+          topLeft: Radius.circular(30),
+          topRight: Radius.circular(30),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.0, 0.5, 1.0], // negro hasta la mitad, luego abre a morado
+          colors: [
+            Color(0xFF080808), // negro puro arriba
+            Color(0xFF150428), // empieza a cambiar en la mitad
+            Color(0xFF4A0E8F), // morado claro al fondo
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 20,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(30),
+          topRight: Radius.circular(30),
+        ),
+        child: Theme(
+          data: ThemeData(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+          ),
+          child: BottomNavigationBar(
+            currentIndex: currentIndex,
+            onTap: onTap,
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            selectedItemColor: Colors.white,
+            unselectedItemColor: Colors.white,
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            selectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              height: 1.2,
+            ),
+            unselectedLabelStyle: const TextStyle(height: 1.2),
+            items: [
+              BottomNavigationBarItem(
+                icon: _buildIcon('assets/images/ic_explore.png'),
+                activeIcon: _buildIcon('assets/images/ic_explore_filled.png'),
+                label: 'Explorar',
+              ),
+              BottomNavigationBarItem(
+                icon: _buildIcon('assets/images/ic_dashboard.png'),
+                activeIcon: _buildIcon('assets/images/ic_dashboard_filled.png'),
+                label: 'Dashboard',
+              ),
+              BottomNavigationBarItem(
+                icon: _buildIcon('assets/images/ic_wallet.png'),
+                activeIcon: _buildIcon('assets/images/ic_wallet_filled.png'),
+                label: 'Mis Pagos',
+              ),
+              BottomNavigationBarItem(
+                icon: _buildIcon('assets/images/ic_profile.png'),
+                activeIcon: _buildIcon('assets/images/ic_profile_filled.png'),
+                label: 'Mi perfil',
+              ),
+            ],
+          ),
         ),
       ),
-      child: BottomNavigationBar(
-        currentIndex: currentIndex,
-        onTap: onTap,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.transparent, // El color lo da el Container
-        elevation: 0,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        unselectedLabelStyle: const TextStyle(fontSize: 12),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explorar'),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Mis Pagos'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Mi perfil'),
-        ],
+    );
+  }
+
+  Widget _buildIcon(String assetPath) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: Image.asset(
+        assetPath,
+        width: 24,
+        height: 24,
+        color: Colors.white,
       ),
     );
   }
