@@ -13,6 +13,8 @@ dependencies:
 
   # Iconos y Estilo
   cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.0
+
 
   # Renderizado de Guiones de IA
   flutter_markdown: ^0.7.1
@@ -26,6 +28,7 @@ dependencies:
 
   # Manejo de Imágenes (Perfil y Cloudinary)
   image_picker: ^1.2.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

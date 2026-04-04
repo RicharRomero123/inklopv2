@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:inklop_v1/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:inklop_v1/features/payments/presentation/screens/payments_screen.dart';
 import 'widgets/custom_nav_bar.dart';
 import 'screens/dashboard_page.dart';
 import 'screens/payments_page.dart';
@@ -29,9 +31,9 @@ class _MainScreenState extends State<MainScreen> {
       // 1. Nueva pantalla de campañas (Reemplaza a la anterior ExplorePage)
       ExploreCampaignsScreen(accessToken: widget.accessToken),
 
-      const DashboardPage(),
+      DashboardScreen(accessToken: widget.accessToken),
 
-      const PaymentsPage(),
+      PaymentsScreen(accessToken: widget.accessToken),
 
       // 2. Pantalla de perfil real
       ProfilePage(accessToken: widget.accessToken),

@@ -43,13 +43,18 @@ class SocialMediaApiService {
     return [];
   }
 
-  // GET: Ejecutar algoritmo de verificación
+  // GET: Ejecutar algoritmo de verificación — lee isVerified del body
   Future<bool> verifyAccount(int id, String token) async {
     final url = Uri.parse('${AppConstants.apiBaseUrl}/socialmedia/verificate/$id');
     try {
       final response = await http.get(url, headers: _headers(token));
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['isVerified'] == true;
+      }
+      return false;
     } catch (e) {
+      print("Error verifying account: $e");
       return false;
     }
   }
@@ -57,10 +62,13 @@ class SocialMediaApiService {
   // DELETE: Eliminar vinculación
   Future<bool> deleteAccount(int id, String token) async {
     final url = Uri.parse('${AppConstants.apiBaseUrl}/socialmedia/socialmedia/$id');
+    print('DELETE → $url');
     try {
       final response = await http.delete(url, headers: _headers(token));
-      return response.statusCode == 200;
+      print('DELETE status: ${response.statusCode}');
+      return response.statusCode == 200 || response.statusCode == 204;
     } catch (e) {
+      print("Error deleting account: $e");
       return false;
     }
   }
