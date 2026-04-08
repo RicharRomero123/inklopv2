@@ -64,3 +64,18 @@ class StripeAccountResponse {
     externalAccountId: json['externalAccountId'],
   );
 }
+// Agrega esta clase a tu archivo stripe_models.dart existente
+
+class StripeProfileStatus {
+  final bool completed;
+  final dynamic pending; // null o datos adicionales según el backend
+
+  StripeProfileStatus({required this.completed, this.pending});
+
+  factory StripeProfileStatus.fromJson(Map<String, dynamic> json) {
+    return StripeProfileStatus(
+      completed: json['completed'] as bool,
+      pending: json['pending'],
+    );
+  }
+}

@@ -4,7 +4,7 @@ import 'creator_profile_screen.dart';
 
 class BirthDateScreen extends StatefulWidget {
   final String accessToken;
-  final String email; // <--- AGREGADO: Para pasarlo al perfil final
+  final String email;
 
   const BirthDateScreen({
     super.key,
@@ -35,16 +35,18 @@ class _BirthDateScreenState extends State<BirthDateScreen> {
     super.dispose();
   }
 
-  // --- Lógica de Validación de Fecha y Edad ---
   void _validateDate(String value) {
-    // El formato con espacios es "DD / MM / AAAA" (14 caracteres)
-    if (value.length < 14) {
-      if (_isDateValid) setState(() { _isDateValid = false; _errorText = null; });
+    if (value.length != 14) {
+      if (_isDateValid) {
+        setState(() {
+          _isDateValid = false;
+          _errorText = null;
+        });
+      }
       return;
     }
 
     try {
-      // Limpiamos los espacios y separamos por '/'
       List<String> parts = value.replaceAll(' ', '').split('/');
       int day = int.parse(parts[0]);
       int month = int.parse(parts[1]);
@@ -52,121 +54,200 @@ class _BirthDateScreenState extends State<BirthDateScreen> {
 
       final now = DateTime.now();
 
-      // Validaciones básicas de calendario
-      if (year < 1900 || year > now.year || month < 1 || month > 12 || day < 1 || day > 31) {
-        throw Exception();
+      if (year < 1900 || year > now.year) throw Exception();
+      if (month < 1 || month > 12) throw Exception();
+
+      int daysInMonth(int m, int y) {
+        if (m == 2) return (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 29 : 28;
+        const days = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        return days[m];
       }
 
-      final dob = DateTime(year, month, day);
+      if (day < 1 || day > daysInMonth(month, year)) throw Exception();
 
-      // Cálculo de edad
+      final dob = DateTime(year, month, day);
       int age = now.year - dob.year;
-      if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      if (now.month < dob.month ||
+          (now.month == dob.month && now.day < dob.day)) {
         age--;
       }
 
       if (age < 18) {
         setState(() {
           _isDateValid = false;
-          _errorText = "Debes ser mayor de 18 años para continuar.";
+          _errorText = "Debes ser mayor de 18 años para registrarte.";
         });
         return;
       }
 
-      // Si todo está bien
       setState(() {
         _isDateValid = true;
         _errorText = null;
       });
-
     } catch (e) {
       setState(() {
         _isDateValid = false;
-        _errorText = "Fecha inválida.";
+        _errorText = null;
       });
     }
   }
 
+  void _onContinue() {
+    final parts = _dateController.text.replaceAll(' ', '').split('/');
+    final formattedDate = '${parts[2]}-${parts[1]}-${parts[0]}';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreatorProfileScreen(
+          accessToken: widget.accessToken,
+          birthDate: formattedDate,
+          email: widget.email,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isActive =
+        _focusNode.hasFocus || _dateController.text.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16.0, top: 8, bottom: 8),
+          child: CircleAvatar(
+            backgroundColor: const Color(0xFFF8F8F8),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.black, size: 16),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
         ),
       ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 40),
-              const Text(
-                '¿Cuándo es tu cumpleaños?',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Tu edad nos ayuda a mantener segura la comunidad de Inklop.',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 10),
 
-              // Campo de entrada de fecha
-              TextField(
-                controller: _dateController,
-                focusNode: _focusNode,
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2),
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(8),
-                  BirthDateInputFormatter(),
-                ],
-                decoration: InputDecoration(
-                  hintText: 'DD / MM / AAAA',
-                  hintStyle: const TextStyle(color: Color(0xFFE0E0E0)),
-                  errorText: _errorText,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
+              // ── ÍCONO CABECERA ──────────────────────────────────────
+              Center(
+                child: Container(
+                  height: 64,
+                  width: 64,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF8F8F8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/images/icon_cake_header.png',
+                      height: 32,
+                      errorBuilder: (c, o, s) =>
+                      const Icon(Icons.cake, color: Colors.black),
+                    ),
+                  ),
                 ),
-                onChanged: _validateDate,
               ),
+              const SizedBox(height: 24),
+
+              // ── TÍTULO ──────────────────────────────────────────────
+              const Text(
+                'Ingresa tu fecha de nacimiento',
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1A1A)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Para verificar tu edad, por favor ingresa la fecha de nacimiento',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, color: Colors.grey, height: 1.4),
+              ),
+              const SizedBox(height: 40),
+
+              // ── INPUT FECHA ─────────────────────────────────────────
+              Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 280,
+                  height: 68,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F7F7),
+                    borderRadius: BorderRadius.circular(35),
+                    border: Border.all(
+                      color: _errorText != null
+                          ? Colors.redAccent
+                          : (isActive
+                          ? const Color(0xFFE0E0E0)
+                          : const Color(0xFFF3F3F3)),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _dateController,
+                    focusNode: _focusNode,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(8),
+                      BirthDateInputFormatter(),
+                    ],
+                    decoration: const InputDecoration(
+                      hintText: 'DD / MM / AAAA',
+                      hintStyle: TextStyle(
+                        color: Color(0xFFADADAD),
+                        fontWeight: FontWeight.normal,
+                        letterSpacing: 0,
+                      ),
+                      border: InputBorder.none,
+                      counterText: "",
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: _validateDate,
+                  ),
+                ),
+              ),
+
+              // ── ERROR ───────────────────────────────────────────────
+              if (_errorText != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12.0),
+                  child: Text(
+                    _errorText!,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
 
               const Spacer(),
 
-              // Botón Continuar
+              // ── BOTÓN CONTINUAR ─────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: FilledButton(
-                  onPressed: _isDateValid
-                      ? () {
-                    // Extraemos partes para formatear a YYYY-MM-DD
-                    final parts = _dateController.text.replaceAll(' ', '').split('/');
-                    final formattedDate = '${parts[2]}-${parts[1]}-${parts[0]}';
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CreatorProfileScreen(
-                          accessToken: widget.accessToken,
-                          birthDate: formattedDate,
-                          email: widget.email, // <--- SOLUCIÓN AL ERROR
-                        ),
-                      ),
-                    );
-                  }
-                      : null,
+                  onPressed: _isDateValid ? _onContinue : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF1A1A1A),
                     disabledBackgroundColor: const Color(0xFFF1F1F1),
@@ -175,14 +256,16 @@ class _BirthDateScreenState extends State<BirthDateScreen> {
                   child: Text(
                     'Continuar',
                     style: TextStyle(
-                      color: _isDateValid ? Colors.white : const Color(0xFFADADAD),
+                      color: _isDateValid
+                          ? Colors.white
+                          : const Color(0xFFADADAD),
+                      fontSize: 17,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -191,18 +274,20 @@ class _BirthDateScreenState extends State<BirthDateScreen> {
   }
 }
 
-// --- Formateador de Texto para la Fecha (DD / MM / AAAA) ---
+// ── FORMATTER ─────────────────────────────────────────────────────────────────
 class BirthDateInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    var text = newValue.text;
-    if (newValue.selection.baseOffset == 0) return newValue;
-
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final newText = newValue.text;
     var buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      buffer.write(text[i]);
+
+    for (int i = 0; i < newText.length; i++) {
+      buffer.write(newText[i]);
       var nonZeroIndex = i + 1;
-      if (nonZeroIndex % 2 == 0 && nonZeroIndex != text.length && nonZeroIndex <= 4) {
+      if (nonZeroIndex == 2 && nonZeroIndex != newText.length) {
+        buffer.write(' / ');
+      } else if (nonZeroIndex == 4 && nonZeroIndex != newText.length) {
         buffer.write(' / ');
       }
     }

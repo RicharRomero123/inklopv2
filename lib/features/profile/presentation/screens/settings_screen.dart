@@ -29,7 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // ── CUENTA ────────────────────────────────────────────
                 _sectionLabel('Cuenta'),
                 _navTile(
-                  assetIcon: 'assets/images/ic_llave.png',
+                  assetIcon: 'assets/images/ic_candado.png',
                   title: 'Seguridad',
                   onTap: () {},
                 ),

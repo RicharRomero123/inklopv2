@@ -6,45 +6,35 @@ class CampaignCard extends StatelessWidget {
   final Campaign campaign;
   final VoidCallback onTap;
 
-  const CampaignCard({
-    super.key,
-    required this.campaign,
-    required this.onTap,
-  });
+  const CampaignCard({super.key, required this.campaign, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    final bool isPopular = campaign.quantitySubmissions > 5;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
+        margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(25),
+          borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             )
           ],
-          border: Border.all(color: Colors.grey.shade100),
+          border: Border.all(color: const Color(0xFFF2F2F7)),
         ),
         child: Column(
           children: [
-            // Fila Superior: Logo, Título y CPM
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    campaign.image,
-                    width: 55,
-                    height: 55,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                _buildCompanyLogo(),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -52,77 +42,161 @@ class CampaignCard extends StatelessWidget {
                     children: [
                       Text(
                         campaign.title,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-                        maxLines: 1,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 2, // ← Cambiado de 1 a 2
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          '🔥 La más popular',
-                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
-                        ),
-                      )
+                      if (isPopular) _buildPopularBadge(),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F3F3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'USD ${campaign.budget.cpm}/1k',
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                  ),
-                )
+                const SizedBox(width: 8),
+                _buildCpmBadge(),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Barra de Progreso del Presupuesto
+            const SizedBox(height: 16),
             BudgetProgressBar(
               spent: campaign.budget.spent,
               total: campaign.budget.total,
               percentage: campaign.budget.percentage,
             ),
-
-            const SizedBox(height: 20),
-
-            // Fila Inferior: Info extra y Plataformas
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _miniInfo('Tipo', campaign.creatorType),
-                _miniInfo('Categoría', campaign.categories.isNotEmpty ? campaign.categories.first : 'N/A'),
-                Row(
-                  children: [
-                    if (campaign.allowsTiktok) const Icon(Icons.music_note, size: 20, color: Colors.black),
-                    const SizedBox(width: 6),
-                    if (campaign.allowsInstagram) const Icon(Icons.camera_alt_outlined, size: 20, color: Colors.black),
-                  ],
-                )
-              ],
-            )
+            const SizedBox(height: 16),
+            _buildFooter(),
           ],
         ),
       ),
     );
   }
 
-  Widget _miniInfo(String label, String value) {
+  Widget _buildCompanyLogo() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(
+        campaign.businessImage,
+        width: 45,
+        height: 45,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: 45,
+          height: 45,
+          color: Colors.grey[200],
+          child: const Icon(Icons.business, size: 20, color: Colors.grey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopularBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/images/ic_fire.png',
+            width: 12,
+            height: 12,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.local_fire_department,
+              color: Colors.orange,
+              size: 12,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'La más popular',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCpmBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        'USD ${campaign.budget.cpm.toStringAsFixed(2)}/1k',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _miniItem('Tipo', campaign.creatorType),
+        _miniItem(
+          'Categoría',
+          campaign.categories.isNotEmpty ? campaign.categories.first : 'UGC',
+        ),
+        // ← Label "Plataforma" encima de los iconos
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Plataforma',
+              style: TextStyle(color: Colors.grey, fontSize: 10),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                if (campaign.allowsTiktok)
+                  Image.asset(
+                    'assets/images/ic_tiktok.png',
+                    width: 16,
+                    height: 16,
+                    errorBuilder: (c, e, s) =>
+                    const Icon(Icons.music_note, size: 16),
+                  ),
+                if (campaign.allowsTiktok && campaign.allowsInstagram)
+                  const SizedBox(width: 8),
+                if (campaign.allowsInstagram)
+                  Image.asset(
+                    'assets/images/ic_instagram.png',
+                    width: 16,
+                    height: 16,
+                    errorBuilder: (c, e, s) =>
+                    const Icon(Icons.camera_alt, size: 16),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _miniItem(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-        const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        ),
       ],
     );
   }

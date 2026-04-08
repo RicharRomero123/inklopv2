@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:inklop_v1/features/profile/presentation/screens/linked_accounts_screen.dart';
 import '../../data/profile_api_service.dart';
+import '../../../social_media/data/social_media_api_service.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
-import '../../../social_media/presentation/screens/social_media_link_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   final String accessToken;
@@ -16,10 +17,11 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage>
     with SingleTickerProviderStateMixin {
   final ProfileApiService _apiService = ProfileApiService();
+  final SocialMediaApiService _socialApi = SocialMediaApiService();
   Map<String, dynamic>? _userData;
+  List _verifiedAccounts = [];
   bool _isLoading = true;
 
-  // Animación del shimmer
   late AnimationController _shimmerCtrl;
   late Animation<double> _shimmerAnim;
 
@@ -44,10 +46,19 @@ class _ProfilePageState extends State<ProfilePage>
 
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
-    final data = await _apiService.getMyProfile(widget.accessToken);
+
+    // Cargamos perfil y cuentas en paralelo
+    final results = await Future.wait([
+      _apiService.getMyProfile(widget.accessToken),
+      _socialApi.getAccountsByUser(widget.accessToken),
+    ]);
+
     if (mounted) {
       setState(() {
-        _userData = data; // puede quedar null si falla — no importa
+        _userData = results[0] as Map<String, dynamic>?;
+        final allAccounts = (results[1] as List?) ?? [];
+        _verifiedAccounts =
+            allAccounts.where((s) => s['isVerified'] == true).toList();
         _isLoading = false;
       });
     }
@@ -67,18 +78,6 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  String _getPlatformIcon(String platform) {
-    switch (platform.toLowerCase()) {
-      case 'tiktok':
-        return 'assets/images/profile_tiktok.png';
-      case 'instagram':
-        return 'assets/images/profile_ig.png';
-      default:
-        return 'assets/images/ic_profile.png';
-    }
-  }
-
-  // ── SKELETON con shimmer animado ─────────────────────────────────────────
   Widget _skeleton({
     required double width,
     required double height,
@@ -100,15 +99,10 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // Decide si mostrar skeleton: cuando carga O cuando falló (userData null)
   bool get _showSkeleton => _isLoading || _userData == null;
 
   @override
   Widget build(BuildContext context) {
-    final List allSocials = _userData?['socialMedias'] ?? [];
-    final verifiedAccounts =
-    allSocials.where((s) => s['isVerified'] == true).toList();
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: RefreshIndicator(
@@ -121,11 +115,10 @@ class _ProfilePageState extends State<ProfilePage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
-              // ── HEADER: FOTO | STATS + BOTONES ──────────────────────
+              // ── HEADER ───────────────────────────────────────────────
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Avatar
                   _showSkeleton
                       ? _skeleton(width: 88, height: 100, radius: 25)
                       : Container(
@@ -142,20 +135,19 @@ class _ProfilePageState extends State<ProfilePage>
                           : null,
                     ),
                     child: _userData?['avatarUrl'] == null
-                        ? const Icon(Icons.person, size: 42, color: Colors.grey)
+                        ? const Icon(Icons.person,
+                        size: 42, color: Colors.grey)
                         : null,
                   ),
 
                   const SizedBox(width: 16),
 
-                  // Stats + botones
                   Expanded(
                     child: SizedBox(
                       height: 100,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Stats — skeleton o datos reales
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: _showSkeleton
@@ -163,9 +155,11 @@ class _ProfilePageState extends State<ProfilePage>
                               3,
                                   (_) => Column(
                                 children: [
-                                  _skeleton(width: 36, height: 18, radius: 8),
+                                  _skeleton(
+                                      width: 36, height: 18, radius: 8),
                                   const SizedBox(height: 5),
-                                  _skeleton(width: 52, height: 11, radius: 6),
+                                  _skeleton(
+                                      width: 52, height: 11, radius: 6),
                                 ],
                               ),
                             )
@@ -175,8 +169,6 @@ class _ProfilePageState extends State<ProfilePage>
                               _buildStatColumn('s/1.5k', 'Ganancias'),
                             ],
                           ),
-
-                          // Botones — SIEMPRE visibles, funcionales
                           Row(
                             children: [
                               Expanded(
@@ -184,23 +176,27 @@ class _ProfilePageState extends State<ProfilePage>
                                   height: 40,
                                   child: FilledButton(
                                     onPressed: _showSkeleton
-                                        ? null // deshabilitado mientras carga
+                                        ? null
                                         : () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => EditProfileScreen(
-                                          accessToken: widget.accessToken,
-                                          initialData: _userData!,
-                                        ),
+                                        builder: (_) =>
+                                            EditProfileScreen(
+                                              accessToken:
+                                              widget.accessToken,
+                                              initialData: _userData!,
+                                            ),
                                       ),
                                     ).then((_) => _loadProfile()),
                                     style: FilledButton.styleFrom(
                                       backgroundColor: _showSkeleton
                                           ? const Color(0xFFE5E5EA)
                                           : const Color(0xFF1C1C1E),
-                                      disabledBackgroundColor: const Color(0xFFE5E5EA),
+                                      disabledBackgroundColor:
+                                      const Color(0xFFE5E5EA),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
+                                        borderRadius:
+                                        BorderRadius.circular(20),
                                       ),
                                     ),
                                     child: _showSkeleton
@@ -275,7 +271,8 @@ class _ProfilePageState extends State<ProfilePage>
                   ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _skeleton(width: double.infinity, height: 14, radius: 8),
+                  _skeleton(
+                      width: double.infinity, height: 14, radius: 8),
                   const SizedBox(height: 6),
                   _skeleton(width: 200, height: 14, radius: 8),
                 ],
@@ -283,7 +280,9 @@ class _ProfilePageState extends State<ProfilePage>
                   : Text(
                 _userData?['description'] ?? 'Sin descripción aún...',
                 style: const TextStyle(
-                    fontSize: 15, height: 1.45, color: Color(0xFF1C1C1E)),
+                    fontSize: 15,
+                    height: 1.45,
+                    color: Color(0xFF1C1C1E)),
               ),
 
               const SizedBox(height: 14),
@@ -291,7 +290,8 @@ class _ProfilePageState extends State<ProfilePage>
               // ── UBICACIÓN Y FECHA ────────────────────────────────────
               Row(
                 children: [
-                  const Icon(Icons.public, size: 16, color: Color(0xFF8E8E93)),
+                  const Icon(Icons.public,
+                      size: 16, color: Color(0xFF8E8E93)),
                   const SizedBox(width: 5),
                   _showSkeleton
                       ? _skeleton(width: 80, height: 13, radius: 6)
@@ -327,7 +327,8 @@ class _ProfilePageState extends State<ProfilePage>
                       padding: const EdgeInsets.only(right: 22),
                       child: Column(
                         children: [
-                          _skeleton(width: 68, height: 68, radius: 18),
+                          _skeleton(
+                              width: 68, height: 68, radius: 18),
                           const SizedBox(height: 7),
                           _skeleton(width: 56, height: 12, radius: 6),
                         ],
@@ -335,11 +336,8 @@ class _ProfilePageState extends State<ProfilePage>
                     ),
                   )
                       : [
-                    ...verifiedAccounts.map(
-                          (social) => _buildSocialItem(
-                        platform: social['platform'],
-                        nickname: social['nickname'] ?? 'user',
-                      ),
+                    ..._verifiedAccounts.map(
+                          (social) => _buildSocialItem(social),
                     ),
                     _buildAddAccount(context),
                   ],
@@ -374,35 +372,83 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── SOCIAL ITEM ──────────────────────────────────────────────────────────
-  Widget _buildSocialItem({
-    required String platform,
-    required String nickname,
-  }) {
+  // ── SOCIAL ITEM — avatar + badge de plataforma + nickname ────────────────
+  Widget _buildSocialItem(Map social) {
+    final String? avatarUrl = social['avatar'];
+    final String platform = social['platform'] ?? '';
+    final String nickname = social['nickname'] ?? social['name_account'] ?? 'user';
+
+    String platformAsset;
+    switch (platform.toLowerCase()) {
+      case 'tiktok':
+        platformAsset = 'assets/images/ic_tiktok.png';
+        break;
+      case 'instagram':
+        platformAsset = 'assets/images/ic_instagram.png';
+        break;
+      default:
+        platformAsset = '';
+    }
+
     return Padding(
       padding: const EdgeInsets.only(right: 22),
       child: Column(
         children: [
-          Container(
-            width: 68,
-            height: 68,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Center(
-              child: Image.asset(
-                _getPlatformIcon(platform),
-                width: 30,
-                height: 30,
-                color: Colors.white,
+          // Avatar con badge de plataforma
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Avatar del perfil
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: const Color(0xFFE5E5EA),
+                  image: avatarUrl != null
+                      ? DecorationImage(
+                    image: NetworkImage(avatarUrl),
+                    fit: BoxFit.cover,
+                  )
+                      : null,
+                ),
+                child: avatarUrl == null
+                    ? const Icon(Icons.person, size: 32, color: Colors.grey)
+                    : null,
               ),
-            ),
+              // Badge ícono red social — esquina inferior derecha
+              Positioned(
+                bottom: -4,
+                right: -4,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.10),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: platformAsset.isNotEmpty
+                      ? Image.asset(platformAsset, fit: BoxFit.contain)
+                      : const Icon(Icons.link, size: 14, color: Colors.grey),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 10),
           Text(
             '@$nickname',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -416,8 +462,7 @@ class _ProfilePageState extends State<ProfilePage>
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              SocialMediaLinkScreen(accessToken: widget.accessToken),
+          builder: (_) => LinkedAccountsScreen(accessToken: widget.accessToken),
         ),
       ).then((_) => _loadProfile()),
       child: Column(
@@ -433,7 +478,7 @@ class _ProfilePageState extends State<ProfilePage>
           ),
           const SizedBox(height: 7),
           const Text(
-            'Agregar cuenta',
+            'Agregar',
             style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93)),
           ),
         ],

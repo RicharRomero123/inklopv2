@@ -21,18 +21,30 @@ class MyApp extends StatelessWidget {
       title: 'Inklop',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.black),
-          useMaterial3: true
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.black),
+
+        // 🚀 AHORA USAMOS LA FUENTE LOCAL
+        // Esto aplica Geist a toda la app sin errores de red
+        fontFamily: 'Geist',
+
+        // Ajustamos el TextTheme para que herede la fuente local
+        textTheme: const TextTheme(
+          displayLarge: TextStyle(fontFamily: 'Geist', fontWeight: FontWeight.bold),
+          bodyLarge: TextStyle(fontFamily: 'Geist'),
+          bodyMedium: TextStyle(fontFamily: 'Geist'),
+        ),
       ),
       home: FutureBuilder<String?>(
         future: _checkLoginStatus(),
         builder: (context, snapshot) {
-          // Mientras lee la memoria, muestra un cargador
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            return const Scaffold(
+              backgroundColor: Colors.white,
+              body: Center(child: CircularProgressIndicator(color: Colors.black)),
+            );
           }
 
-          // 🚀 CORREGIDO: Si encontró el token, usamos snapshot.data! y quitamos el const
           if (snapshot.hasData && snapshot.data != null) {
             return MainScreen(accessToken: snapshot.data!);
           } else {

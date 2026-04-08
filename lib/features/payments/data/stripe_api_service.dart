@@ -10,15 +10,16 @@ class StripeApiService {
     'accept': '*/*',
   };
 
-  Future<StripeAccountResponse?> createConnectedAccount(String token, StripeAccountRequest data) async {
-    final url = Uri.parse('${AppConstants.apiBaseUrl}/stripe/connected-account');
+  Future<StripeAccountResponse?> createConnectedAccount(
+      String token, StripeAccountRequest data) async {
+    final url =
+    Uri.parse('${AppConstants.apiBaseUrl}/stripe/connected-account');
 
-    // 🔍 SUPER LOG: Ver el body antes de enviar
     final bodyEncoded = jsonEncode(data.toJson());
     print('\n🚀 [STRIPE API] ENVIANDO POST A: $url');
     print('📦 [BODY JSON]:');
     JsonEncoder encoder = const JsonEncoder.withIndent('  ');
-    print(encoder.convert(data.toJson())); // Imprime el JSON ordenadito
+    print(encoder.convert(data.toJson()));
     print('------------------------------------------------------\n');
 
     try {
@@ -41,7 +42,7 @@ class StripeApiService {
     }
     return null;
   }
-// 🚀 NUEVO: Obtener Balance real
+
   Future<Map<String, dynamic>?> getBalance(String token) async {
     final url = Uri.parse('${AppConstants.apiBaseUrl}/balance');
     try {
@@ -54,18 +55,12 @@ class StripeApiService {
     }
     return null;
   }
-  // Paso 2: Generar el link de Stripe (Onboarding)
 
-  // Generar link de Onboarding / Verificación
-  // ... otros métodos (createConnectedAccount, etc)
-
-// ✅ DEJA SOLO ESTA VERSIÓN
   Future<StripeAccountLinkResponse?> generateAccountLink(String token) async {
     final url = Uri.parse('${AppConstants.apiBaseUrl}/stripe/account-link');
     try {
       final response = await http.post(url, headers: _headers(token));
       if (response.statusCode == 200) {
-        // Retornamos el objeto completo con URL y Expiración
         return StripeAccountLinkResponse.fromJson(jsonDecode(response.body));
       }
     } catch (e) {
@@ -74,4 +69,21 @@ class StripeApiService {
     return null;
   }
 
+  // --- GET /stripe/profile-status ---
+  // Retorna { "completed": bool, "pending": null | ... }
+  // completed: true  → cuenta Stripe ya conectada y completa
+  // completed: false → falta completar el onboarding
+  Future<StripeProfileStatus?> getProfileStatus(String token) async {
+    final url =
+    Uri.parse('${AppConstants.apiBaseUrl}/stripe/profile-status');
+    try {
+      final response = await http.get(url, headers: _headers(token));
+      if (response.statusCode == 200) {
+        return StripeProfileStatus.fromJson(jsonDecode(response.body));
+      }
+    } catch (e) {
+      print("❌ Error getProfileStatus: $e");
+    }
+    return null;
+  }
 }

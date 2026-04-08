@@ -1,5 +1,5 @@
 name: inklop_v1
-description: "A new Flutter project."
+description: "Plataforma de marketing de influencers y UGC."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -10,43 +10,52 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # Iconos y Estilo
   cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
   url_launcher: ^6.3.0
-
-
-  # Renderizado de Guiones de IA
   flutter_markdown: ^0.7.1
-
-  # Autenticación y Almacenamiento Seguro
   auth0_flutter: ^1.14.0
   flutter_secure_storage: ^10.0.0
-
-  # Networking y API
   http: ^1.6.0
-
-  # Manejo de Imágenes (Perfil y Cloudinary)
   image_picker: ^1.2.1
   shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
 
-  # 🚀 CONFIGURACIÓN DE ASSETS CORREGIDA
   assets:
     - assets/images/
-    # Si vas a usar animaciones Lottie o fuentes luego, las agregarías aquí abajo.
+    # 🚀 Asegúrate de que esta carpeta exista con tus .ttf
+    - assets/fonts/
 
-  # Si en el futuro agregas fuentes personalizadas, descomenta esto:
-  # fonts:
-  #   - family: Montserrat
-  #     fonts:
-  #       - asset: assets/fonts/Montserrat-Regular.ttf
-  #       - asset: assets/fonts/Montserrat-Bold.ttf
-  #         weight: 700
+  # 🚀 REGISTRO DE FUENTE LOCAL (Solución al error de Geist)
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Regular.ttf
+        - asset: assets/fonts/Geist-Bold.ttf
+          weight: 700
+
+# 🚀 ICONO DE LA APP
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/inklop_icon.png"
+  adaptive_icon_background: "#c624da"
+  adaptive_icon_foreground: "assets/images/inklop_icon.png"
+
+# 🚀 PANTALLA DE CARGA (SPLASH)
+flutter_native_splash:
+  color: "#c624da"
+  image: "assets/images/inklop_icon.png"
+  android_12:
+    image: "assets/images/inklop_icon.png"
+    color: "#c624da"
+  fullscreen: true

@@ -20,19 +20,10 @@ class CustomNavBar extends StatelessWidget {
           topLeft: Radius.circular(30),
           topRight: Radius.circular(30),
         ),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0.0, 0.5, 1.0], // negro hasta la mitad, luego abre a morado
-          colors: [
-            Color(0xFF080808), // negro puro arriba
-            Color(0xFF150428), // empieza a cambiar en la mitad
-            Color(0xFF4A0E8F), // morado claro al fondo
-          ],
-        ),
+        color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black54,
+            color: Colors.black12,
             blurRadius: 20,
             offset: Offset(0, -4),
           ),
@@ -54,8 +45,8 @@ class CustomNavBar extends StatelessWidget {
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.transparent,
             elevation: 0,
-            selectedItemColor: Colors.white,
-            unselectedItemColor: Colors.white,
+            selectedItemColor: Colors.black,
+            unselectedItemColor: Colors.black54,
             selectedFontSize: 11,
             unselectedFontSize: 11,
             selectedLabelStyle: const TextStyle(
@@ -65,23 +56,23 @@ class CustomNavBar extends StatelessWidget {
             unselectedLabelStyle: const TextStyle(height: 1.2),
             items: [
               BottomNavigationBarItem(
-                icon: _buildIcon('assets/images/ic_explore.png'),
-                activeIcon: _buildIcon('assets/images/ic_explore_filled.png'),
+                icon: _buildIcon('assets/images/ic_explore.png', isSelected: currentIndex == 0),
+                activeIcon: _buildIcon('assets/images/ic_explore_filled.png', isSelected: true),
                 label: 'Explorar',
               ),
               BottomNavigationBarItem(
-                icon: _buildIcon('assets/images/ic_dashboard.png'),
-                activeIcon: _buildIcon('assets/images/ic_dashboard_filled.png'),
+                icon: _buildIcon('assets/images/ic_dashboard.png', isSelected: currentIndex == 1),
+                activeIcon: _buildIcon('assets/images/ic_dashboard_filled.png', isSelected: true),
                 label: 'Dashboard',
               ),
               BottomNavigationBarItem(
-                icon: _buildIcon('assets/images/ic_wallet.png'),
-                activeIcon: _buildIcon('assets/images/ic_wallet_filled.png'),
+                icon: _buildIcon('assets/images/ic_wallet.png', isSelected: currentIndex == 2),
+                activeIcon: _buildIcon('assets/images/ic_wallet_filled.png', isSelected: true),
                 label: 'Mis Pagos',
               ),
               BottomNavigationBarItem(
-                icon: _buildIcon('assets/images/ic_profile.png'),
-                activeIcon: _buildIcon('assets/images/ic_profile_filled.png'),
+                icon: _buildIcon('assets/images/ic_profile.png', isSelected: currentIndex == 3),
+                activeIcon: _buildIcon('assets/images/ic_profile_filled.png', isSelected: true),
                 label: 'Mi perfil',
               ),
             ],
@@ -91,14 +82,14 @@ class CustomNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildIcon(String assetPath) {
+  Widget _buildIcon(String assetPath, {bool isSelected = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4.0),
       child: Image.asset(
         assetPath,
         width: 24,
         height: 24,
-        color: Colors.white,
+        color: isSelected ? Colors.black : Colors.black54,
       ),
     );
   }

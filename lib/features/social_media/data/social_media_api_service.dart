@@ -72,4 +72,17 @@ class SocialMediaApiService {
       return false;
     }
   }
+  // GET: Obtener todas las cuentas del usuario
+  Future<List?> getAccountsByUser(String token) async {
+    final url = Uri.parse('${AppConstants.apiBaseUrl}/socialmedia/socialmedias-by-user');
+    try {
+      final response = await http.get(url, headers: _headers(token));
+      if (response.statusCode == 200) {
+        return jsonDecode(utf8.decode(response.bodyBytes));
+      }
+    } catch (e) {
+      print("Error getAccountsByUser: $e");
+    }
+    return null;
+  }
 }
