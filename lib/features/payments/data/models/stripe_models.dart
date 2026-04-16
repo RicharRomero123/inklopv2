@@ -79,3 +79,44 @@ class StripeProfileStatus {
     );
   }
 }
+class StripePayoutHistory {
+  final double totalAmount;
+  final int totalCount;
+  final List<MonthlyPayout> monthlyPayouts;
+
+  StripePayoutHistory({
+    required this.totalAmount,
+    required this.totalCount,
+    required this.monthlyPayouts,
+  });
+
+  factory StripePayoutHistory.fromJson(Map<String, dynamic> json) {
+    return StripePayoutHistory(
+      totalAmount: (json['totalAmount'] as num).toDouble(),
+      totalCount: json['totalCount'] as int,
+      monthlyPayouts: (json['monthlyPayouts'] as List)
+          .map((item) => MonthlyPayout.fromJson(item))
+          .toList(),
+    );
+  }
+}
+
+class MonthlyPayout {
+  final String yearMonth; // Ejemplo: "2024-03"
+  final int count;
+  final double amount;
+
+  MonthlyPayout({
+    required this.yearMonth,
+    required this.count,
+    required this.amount,
+  });
+
+  factory MonthlyPayout.fromJson(Map<String, dynamic> json) {
+    return MonthlyPayout(
+      yearMonth: json['yearMonth'] ?? '',
+      count: json['count'] ?? 0,
+      amount: (json['amount'] as num).toDouble(),
+    );
+  }
+}

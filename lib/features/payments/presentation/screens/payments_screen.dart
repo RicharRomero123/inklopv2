@@ -1,8 +1,7 @@
-// lib/features/payments/presentation/screens/payments_screen.dart
-
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../data/stripe_api_service.dart';
+import '../../data/models/stripe_models.dart';
 import 'wallet_screen.dart';
 
 class PaymentsScreen extends StatefulWidget {
@@ -15,34 +14,64 @@ class PaymentsScreen extends StatefulWidget {
 
 class _PaymentsScreenState extends State<PaymentsScreen> {
   final _apiService = StripeApiService();
-  double _amount = 0.0;
+
+  // 💰 Datos de Balance (API /balance)
+  double _currentBalance = 0.0;
+  double _pendingBalance = 0.0;
   String _currency = "USD";
   bool _isLoading = true;
 
-  // Datos simulados del gráfico (reemplazar con datos reales)
-  final List<double> _chartData = [
-    120, 180, 160, 220, 190, 280, 240, 320, 290, 380,
-    350, 410, 390, 460, 440, 520, 500, 580, 560, 640,
-    610, 680, 660, 720, 700, 780, 760, 840, 820, 900,
-  ];
-  final List<String> _chartLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May'];
+  // 📊 Datos de Historial (API /payout-history)
+  StripePayoutHistory? _history;
+  List<double> _chartData = [0, 0, 0, 0, 0];
+  List<String> _chartLabels = ['-', '-', '-', '-', '-'];
   int? _selectedIndex;
 
   @override
   void initState() {
     super.initState();
-    _loadBalance();
+    _loadData();
   }
 
-  Future<void> _loadBalance() async {
-    final data = await _apiService.getBalance(widget.accessToken);
-    if (data != null && mounted) {
-      setState(() {
-        _amount = (data['amount'] as num).toDouble();
-        _currency = data['currency'];
-        _isLoading = false;
-      });
-    } else {
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final results = await Future.wait([
+        _apiService.getBalance(widget.accessToken),
+        _apiService.getPayoutHistory(widget.accessToken),
+      ]);
+
+      final balanceData = results[0] as Map<String, dynamic>?;
+      final historyData = results[1] as StripePayoutHistory?;
+
+      if (mounted) {
+        setState(() {
+          // 1. Mapeo de Balance Real (Nuevos campos del backend)
+          if (balanceData != null) {
+            _currentBalance = (balanceData['currentBalance'] as num).toDouble();
+            _pendingBalance = (balanceData['pendingBalance'] as num).toDouble();
+            _currency = balanceData['currentBalanceCurrency'] ?? "USD";
+          }
+
+          // 2. Mapeo de Historial y Gráfico
+          if (historyData != null && historyData.monthlyPayouts.isNotEmpty) {
+            _history = historyData;
+            _chartData = historyData.monthlyPayouts.map((e) => e.amount).toList();
+            if (_chartData.length == 1) _chartData.insert(0, 0);
+
+            _chartLabels = historyData.monthlyPayouts.map((e) {
+              final parts = e.yearMonth.split('-');
+              const months = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+              return months[int.tryParse(parts[1]) ?? 0];
+            }).toList();
+            _selectedIndex = _chartData.length - 1;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("❌ Error en PaymentsScreen: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -51,237 +80,119 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Balance + chart section (white bg, no padding top)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                    child: _buildBalanceSection(),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildChart(),
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Mis Cobros',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: -0.3,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        const Center(
-                          child: Text(
-                            'Aún no realizaste cobros',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── HEADER con degradado oscuro → morado ─────────────────────────────────
-  Widget _buildHeader() {
-    return Container(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 16,
-        left: 24,
-        right: 8,
-        bottom: 24,
-      ),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF6B1FA8), // morado vivo arriba
-            Color(0xFF3D0D6B), // morado oscuro medio
-            Color(0xFF0D0018), // negro con tinte morado abajo
-          ],
-          stops: [0.0, 0.45, 1.0],
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            'Mis Pagos',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: Image.asset(
-              'assets/images/ic_notification_home.png',
-              width: 24,
-              height: 24,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── BALANCE + badges + botón billetera ───────────────────────────────────
-  Widget _buildBalanceSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Título + botón billetera
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: Colors.black,
+        child: Column(
           children: [
-            const Text(
-              'Ganancias Totales',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-                letterSpacing: -0.2,
-              ),
-            ),
-            // Botón Mi Billetera — negro, pill, icono asset
-            GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => WalletScreen(
-                    accessToken: widget.accessToken,
-                    initialBalance: _amount,
-                  ),
-                ),
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(50),
-                ),
-                child: Row(
+            _buildHeader(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: Colors.black))
+                  : SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
                   children: [
-                    Image.asset(
-                      'assets/images/ic_wallet.png',
-                      width: 15,
-                      height: 15,
-                      color: Colors.white,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+                      child: _buildBalanceSection(),
                     ),
-                    const SizedBox(width: 7),
-                    const Text(
-                      'Mi Billetera',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.1,
-                      ),
-                    ),
+                    _buildChartContainer(),
+                    const SizedBox(height: 32),
+                    _buildPayoutsList(),
                   ],
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
 
-        const SizedBox(height: 10),
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 16, left: 24, right: 24, bottom: 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0xFF6B1FA8), Color(0xFF3D0D6B), Color(0xFF0D0018)],
+        ),
+        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(28), bottomRight: Radius.circular(28)),
+      ),
+      child: const Text('Mis Pagos', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+    );
+  }
 
-        // Monto grande
-        _isLoading
-            ? const SizedBox(
-          height: 52,
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)),
-        )
-            : _buildAmountText(),
-
-        const SizedBox(height: 10),
-
-        // Badges
+  Widget _buildBalanceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _badge('Pagado: 0.00', const Color(0xFF06C167)),
-            const SizedBox(width: 10),
-            _badge('En Proceso: 0.00', const Color(0xFFFF9500)),
+            const Text('Ganancias Totales', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WalletScreen(
+                accessToken: widget.accessToken,
+                initialBalance: _currentBalance,
+                pendingBalance: _pendingBalance, // 🚀 Pasamos ambos a la billetera
+              ))),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(50)),
+                child: const Row(children: [Icon(Icons.account_balance_wallet_outlined, color: Colors.white, size: 14), SizedBox(width: 7), Text('Mi Billetera', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))]),
+              ),
+            ),
           ],
         ),
+        const SizedBox(height: 8),
+        _buildAmountText(_currentBalance),
+        const SizedBox(height: 12),
+        Row(children: [
+          _badge('Recibido: \$${_history?.totalAmount.toStringAsFixed(2) ?? "0.00"}', const Color(0xFF06C167)),
+          const SizedBox(width: 10),
+          _badge('En Proceso: \$${_pendingBalance.toStringAsFixed(2)}', const Color(0xFFFF9500)),
+        ]),
       ],
     );
   }
 
-  // Tipografía del monto — parte entera grande, decimales más pequeños
-  Widget _buildAmountText() {
-    final parts = _amount.toStringAsFixed(2).split('.');
-    final intPart = parts[0];
-    final decPart = parts[1];
-
+  Widget _buildAmountText(double amount) {
+    final intPart = amount.toInt();
+    final decPart = ((amount - intPart) * 100).toInt().toString().padLeft(2, '0');
     return RichText(
       text: TextSpan(
-        style: const TextStyle(
-          fontFamily: 'SF Pro Display', // usa la fuente del sistema en iOS
-          color: Colors.black,
-          fontWeight: FontWeight.bold,
-          letterSpacing: -2,
-        ),
+        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, letterSpacing: -1),
         children: [
-          TextSpan(
-            text: '$_currency \$$intPart',
-            style: const TextStyle(fontSize: 46),
-          ),
-          TextSpan(
-            text: '.$decPart',
-            style: const TextStyle(fontSize: 28, letterSpacing: -1),
-          ),
+          TextSpan(text: '\$ $intPart', style: const TextStyle(fontSize: 46)),
+          TextSpan(text: '.$decPart', style: const TextStyle(fontSize: 28)),
         ],
       ),
     );
   }
 
-  Widget _badge(String text, Color color) {
+  Widget _buildChartContainer() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFFF9F9F9),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFEEEEEE), width: 1.5),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(radius: 3, backgroundColor: color),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+          const Text("Rendimiento Mensual", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 180,
+            width: double.infinity,
+            child: GestureDetector(
+              onTapDown: (d) => _onChartTap(d.localPosition),
+              child: CustomPaint(painter: _AreaChartPainter(data: _chartData, selectedIndex: _selectedIndex, labels: _chartLabels)),
             ),
           ),
         ],
@@ -289,173 +200,112 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  // ── GRÁFICO de área interactivo ──────────────────────────────────────────
-  Widget _buildChart() {
-    return SizedBox(
-      height: 200,
-      child: GestureDetector(
-        onTapDown: (d) => _onChartTap(d.localPosition),
-        onPanUpdate: (d) => _onChartTap(d.localPosition),
-        child: CustomPaint(
-          painter: _AreaChartPainter(
-            data: _chartData,
-            selectedIndex: _selectedIndex,
-            labels: _chartLabels,
-          ),
-          size: Size(MediaQuery.of(context).size.width, 200),
-        ),
+  void _onChartTap(Offset pos) {
+    final chartWidth = MediaQuery.of(context).size.width - 80;
+    final step = chartWidth / (_chartData.length - 1);
+    setState(() => _selectedIndex = (pos.dx / step).round().clamp(0, _chartData.length - 1));
+  }
+
+  Widget _buildPayoutsList() {
+    final payouts = _history?.monthlyPayouts ?? [];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Mis Cobros', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          if (payouts.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.symmetric(vertical: 40), child: Text('Aún no realizaste cobros', style: TextStyle(color: Colors.grey))))
+          else
+            ListView.separated(
+              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              itemCount: payouts.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF2F2F7)),
+              itemBuilder: (context, index) {
+                final item = payouts[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(backgroundColor: const Color(0xFFF2F2F7), child: const Icon(Icons.download_rounded, color: Colors.black, size: 20)),
+                  title: Text(_formatDate(item.yearMonth), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  trailing: Text('+\$${item.amount.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF06C167), fontWeight: FontWeight.bold)),
+                );
+              },
+            ),
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }
 
-  void _onChartTap(Offset pos) {
-    final chartWidth = MediaQuery.of(context).size.width;
-    final step = chartWidth / (_chartData.length - 1);
-    final idx = (pos.dx / step).round().clamp(0, _chartData.length - 1);
-    setState(() => _selectedIndex = idx);
+  String _formatDate(String ym) {
+    final parts = ym.split('-');
+    const months = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    return '${months[int.parse(parts[1])]} ${parts[0]}';
+  }
+
+  Widget _badge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+      child: Row(children: [CircleAvatar(radius: 3, backgroundColor: color), const SizedBox(width: 6), Text(text, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold))]),
+    );
   }
 }
 
-// ── CHART PAINTER ────────────────────────────────────────────────────────────
 class _AreaChartPainter extends CustomPainter {
   final List<double> data;
   final int? selectedIndex;
   final List<String> labels;
 
-  _AreaChartPainter({
-    required this.data,
-    required this.selectedIndex,
-    required this.labels,
-  });
+  _AreaChartPainter({required this.data, required this.selectedIndex, required this.labels});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
+    const double bPad = 25;
+    const double tPad = 10;
+    final cH = size.height - bPad - tPad;
+    final cW = size.width;
 
-    const double bottomPad = 36; // espacio para labels X
-    const double topPad = 16;
-    final chartH = size.height - bottomPad - topPad;
-    final chartW = size.width;
+    double maxVal = data.reduce(max);
+    maxVal = maxVal == 0 ? 100 : maxVal * 1.2;
 
-    final minVal = data.reduce(min);
-    final maxVal = data.reduce(max);
-    final range = (maxVal - minVal) == 0 ? 1.0 : maxVal - minVal;
-
-    // Calcular puntos
-    List<Offset> points = [];
+    List<Offset> pts = [];
     for (int i = 0; i < data.length; i++) {
-      final x = (i / (data.length - 1)) * chartW;
-      final y = topPad + chartH - ((data[i] - minVal) / range) * chartH;
-      points.add(Offset(x, y));
+      final x = (i / (data.length - 1)) * cW;
+      final y = tPad + cH - (data[i] / maxVal) * cH;
+      pts.add(Offset(x, y));
     }
 
-    // Path de la línea (suave con cubicTo)
-    final linePath = Path();
-    linePath.moveTo(points[0].dx, points[0].dy);
-    for (int i = 0; i < points.length - 1; i++) {
-      final cp1 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i].dy);
-      final cp2 = Offset((points[i].dx + points[i + 1].dx) / 2, points[i + 1].dy);
-      linePath.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, points[i + 1].dx, points[i + 1].dy);
+    final path = Path()..moveTo(pts[0].dx, pts[0].dy);
+    for (int i = 0; i < pts.length - 1; i++) {
+      final m = Offset((pts[i].dx + pts[i + 1].dx) / 2, pts[i].dy);
+      final n = Offset((pts[i].dx + pts[i + 1].dx) / 2, pts[i + 1].dy);
+      path.cubicTo(m.dx, m.dy, n.dx, n.dy, pts[i + 1].dx, pts[i + 1].dy);
     }
 
-    // Path del área (cierra hacia abajo)
-    final areaPath = Path.from(linePath);
-    areaPath.lineTo(chartW, size.height - bottomPad);
-    areaPath.lineTo(0, size.height - bottomPad);
-    areaPath.close();
+    final area = Path.from(path)..lineTo(cW, size.height - bPad)..lineTo(0, size.height - bPad)..close();
+    canvas.drawPath(area, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.05), Colors.transparent]).createShader(Rect.fromLTWH(0, 0, cW, size.height)));
+    canvas.drawPath(path, Paint()..color = Colors.black..strokeWidth = 2.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
 
-    // Gradiente del área (negro → gris muy claro)
-    final areaGradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        Colors.black.withOpacity(0.12),
-        Colors.black.withOpacity(0.0),
-      ],
-    );
-    final areaPaint = Paint()
-      ..shader = areaGradient.createShader(
-        Rect.fromLTWH(0, topPad, chartW, chartH),
-      );
-    canvas.drawPath(areaPath, areaPaint);
-
-    // Línea principal
-    final linePaint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(linePath, linePaint);
-
-    // Labels eje X
-    final labelStyle = const TextStyle(
-      color: Color(0xFFAAAAAA),
-      fontSize: 12,
-      fontWeight: FontWeight.w400,
-    );
-    final labelPositions = [0, 7, 14, 21, 28]; // índices aproximados para Jan..May
-    for (int i = 0; i < labels.length && i < labelPositions.length; i++) {
-      final idx = labelPositions[i].clamp(0, data.length - 1);
-      final x = (idx / (data.length - 1)) * chartW;
-      final tp = TextPainter(
-        text: TextSpan(text: labels[i], style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(x - tp.width / 2, size.height - bottomPad + 10));
+    for (int i = 0; i < labels.length; i++) {
+      final x = (i / (data.length - 1)) * cW;
+      final tp = TextPainter(text: TextSpan(text: labels[i], style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w500)), textDirection: TextDirection.ltr)..layout();
+      tp.paint(canvas, Offset(x - tp.width/2, size.height - bPad + 8));
     }
 
-    // Punto seleccionado + tooltip
     if (selectedIndex != null) {
-      final sel = selectedIndex!;
-      final pt = points[sel];
-
-      // Línea vertical punteada
-      final dashedPaint = Paint()
-        ..color = Colors.black.withOpacity(0.25)
-        ..strokeWidth = 1;
-      const dashH = 6.0;
-      const gapH = 4.0;
-      double y = topPad;
-      while (y < size.height - bottomPad) {
-        canvas.drawLine(Offset(pt.dx, y), Offset(pt.dx, min(y + dashH, size.height - bottomPad)), dashedPaint);
-        y += dashH + gapH;
-      }
-
-      // Punto negro
-      canvas.drawCircle(pt, 5, Paint()..color = Colors.black);
-      canvas.drawCircle(pt, 3, Paint()..color = Colors.white);
-
-      // Tooltip oscuro
-      final value = '\$${data[sel].toStringAsFixed(0)}';
-      final tpTooltip = TextPainter(
-        text: TextSpan(
-          text: value,
-          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      const tooltipPad = EdgeInsets.symmetric(horizontal: 12, vertical: 7);
-      final tooltipW = tpTooltip.width + tooltipPad.horizontal;
-      final tooltipH = tpTooltip.height + tooltipPad.vertical;
-      var tooltipX = pt.dx - tooltipW / 2;
-      tooltipX = tooltipX.clamp(4.0, chartW - tooltipW - 4);
-      final tooltipY = pt.dy - tooltipH - 12;
-
-      final tooltipRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(tooltipX, tooltipY, tooltipW, tooltipH),
-        const Radius.circular(10),
-      );
-      canvas.drawRRect(tooltipRect, Paint()..color = Colors.black);
-      tpTooltip.paint(
-        canvas,
-        Offset(tooltipX + tooltipPad.left, tooltipY + tooltipPad.top),
-      );
+      final p = pts[selectedIndex!];
+      canvas.drawCircle(p, 5, Paint()..color = Colors.black);
+      canvas.drawCircle(p, 3, Paint()..color = Colors.white);
+      final tp = TextPainter(text: TextSpan(text: '\$${data[selectedIndex!].toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)..layout();
+      double tx = p.dx - tp.width/2 - 8;
+      tx = tx.clamp(0.0, cW - tp.width - 16);
+      final rect = RRect.fromRectAndRadius(Rect.fromLTWH(tx, p.dy - 35, tp.width + 16, 26), const Radius.circular(8));
+      canvas.drawRRect(rect, Paint()..color = Colors.black);
+      tp.paint(canvas, Offset(tx + 8, p.dy - 30));
     }
   }
-
-  @override
-  bool shouldRepaint(_AreaChartPainter old) =>
-      old.selectedIndex != selectedIndex || old.data != data;
+  @override bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

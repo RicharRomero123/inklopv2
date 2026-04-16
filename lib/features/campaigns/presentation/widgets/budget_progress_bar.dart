@@ -21,11 +21,26 @@ class BudgetProgressBar extends StatelessWidget {
           children: [
             Text(
               'USD ${spent.toStringAsFixed(2)} pagados',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            Text(
-              'de USD ${total.toStringAsFixed(2)} presupuesto',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            Text.rich(
+              TextSpan(
+                style: const TextStyle(fontSize: 12, color: Colors.grey), // Color gris para "de" y "presupuesto"
+                children: [
+                  const TextSpan(text: 'de '),
+                  TextSpan(
+                    text: 'USD ${total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black, // <-- Esto hace que el monto resalte en negro
+                    ),
+                  ),
+                  const TextSpan(text: ' presupuesto'),
+                ],
+              ),
             ),
           ],
         ),

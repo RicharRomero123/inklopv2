@@ -32,7 +32,7 @@ class MetricCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Ícono centrado y más grande
+          // ── ÍCONO PNG ──
           Image.asset(
             iconPath,
             width: 30,
@@ -45,17 +45,20 @@ class MetricCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          // Valor grande
+
+          // ── VALOR (Viene de la API) ──
           Text(
             value,
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
+              color: Colors.black,
             ),
           ),
           const SizedBox(height: 4),
-          // Label pequeño gris
+
+          // ── ETIQUETA ──
           Text(
             label,
             style: const TextStyle(

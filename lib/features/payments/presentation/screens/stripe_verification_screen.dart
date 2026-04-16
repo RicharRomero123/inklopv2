@@ -68,7 +68,6 @@ class _StripeVerificationScreenState extends State<StripeVerificationScreen> {
 
     setState(() => _isProcessing = true);
 
-    // Formateo de teléfono para cumplimiento de Stripe (+51)
     final String rawPhone = _phoneController.text.trim();
     final String formattedPhone = rawPhone.startsWith('+') ? rawPhone : '+51$rawPhone';
 
@@ -83,7 +82,7 @@ class _StripeVerificationScreenState extends State<StripeVerificationScreen> {
       line1: _addressController.text.trim(),
       postalCode: _postalController.text.trim(),
       state: _stateController.text.trim(),
-      currency: "PEN", // 🚀 CAMBIO CLAVE: Ahora enviamos PEN para cuentas PE
+      currency: "PEN",
     );
 
     try {
@@ -92,7 +91,7 @@ class _StripeVerificationScreenState extends State<StripeVerificationScreen> {
       if (response != null) {
         final onboardingUrl = await _apiService.generateAccountLink(widget.accessToken);
         if (onboardingUrl != null && mounted) {
-          // 🚀 CAMBIO AQUÍ: Agregamos .url
+
           await launchUrl(Uri.parse(onboardingUrl.url), mode: LaunchMode.externalApplication);
           if (mounted) Navigator.pop(context);
         }

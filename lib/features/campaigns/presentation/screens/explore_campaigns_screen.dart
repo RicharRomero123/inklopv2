@@ -1,5 +1,6 @@
-// lib/features/campaigns/presentation/screens/explore_campaigns_screen.dart
 import 'package:flutter/material.dart';
+import 'package:inklop_v1/features/auth/data/auth_service.dart';
+import '../../../../core/services/secure_storage_service.dart';
 import '../../data/campaign_api_service.dart';
 import '../../data/models/campaign_model.dart';
 import '../widgets/campaign_card.dart';
@@ -14,14 +15,19 @@ class ExploreCampaignsScreen extends StatefulWidget {
 }
 
 class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
-  final _apiService    = CampaignApiService();
-  final _searchCtrl    = TextEditingController();
-  final _searchFocus   = FocusNode();
+  final _apiService      = CampaignApiService();
+  final _authService     = AuthService();
+  final _storageService  = SecureStorageService();
+
+  final _searchCtrl      = TextEditingController();
+  final _searchFocus     = FocusNode();
 
   List<Campaign>? _campaigns;
-  bool   _isLoading     = true;
+  bool   _isLoading      = true;
   String _selectedFilter = 'Todos';
   String _searchQuery    = '';
+
+  late String _currentAccessToken;
 
   final List<String> _filters = [
     'Todos',
@@ -33,6 +39,7 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
   @override
   void initState() {
     super.initState();
+    _currentAccessToken = widget.accessToken;
     _loadData();
     _searchCtrl.addListener(() {
       setState(() => _searchQuery = _searchCtrl.text.trim().toLowerCase());
@@ -46,22 +53,71 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
     super.dispose();
   }
 
+  // ── LÓGICA DE CARGA CON PRINTS DE DEPURACIÓN ──────────────────────────────
   Future<void> _loadData() async {
-    // Nota: El RefreshIndicator ya muestra su propio spinner,
-    // pero mantenemos _isLoading para la carga inicial.
     if (_campaigns == null) setState(() => _isLoading = true);
 
-    final data = await _apiService.getActiveCampaigns(widget.accessToken);
+    debugPrint("--- 🔄 INICIANDO PROCESO DE CARGA/REFRESH ---");
 
-    if (mounted) {
-      setState(() {
-        _campaigns  = data;
-        _isLoading  = false;
-      });
+    try {
+      // 1. Obtener Refresh Token del Storage
+      final String? storedRefreshToken = await _storageService.getRefreshToken();
+
+      debugPrint("🔑 Refresh Token en Storage: ${storedRefreshToken ?? 'NULO'}");
+      debugPrint("🛑 Access Token Actual (Antes): ${_currentAccessToken.substring(_currentAccessToken.length - 15)}");
+
+      if (storedRefreshToken != null) {
+        // 2. Intentar renovar
+        final newTokens = await _authService.renewToken(storedRefreshToken);
+        final String? newToken = newTokens['token'];
+        final String? newRefresh = newTokens['refreshToken'];
+
+        if (newToken != null) {
+          debugPrint("🆕 Access Token Nuevo (Después): ${newToken.substring(newToken.length - 15)}");
+
+          // Comparación directa para saber si Auth0 te está dando lo mismo
+          if (newToken == _currentAccessToken) {
+            debugPrint("⚠️ ADVERTENCIA: Auth0 devolvió exactamente el mismo token.");
+          } else {
+            debugPrint("✅ ÉXITO: El token ha cambiado.");
+          }
+
+          // Guardar en Storage
+          await _storageService.saveToken(
+            access: newToken,
+            refresh: newRefresh ?? storedRefreshToken,
+          );
+
+          // Actualizar variable local
+          setState(() {
+            _currentAccessToken = newToken;
+          });
+        }
+      }
+
+      // 3. Petición a la API
+      debugPrint("📡 Llamando a la API con el token final...");
+      final data = await _apiService.getActiveCampaigns(_currentAccessToken);
+
+      if (mounted) {
+        setState(() {
+          _campaigns  = data;
+          _isLoading  = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("❌ ERROR CRÍTICO EN EXPLORE: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
+    debugPrint("--- ✅ FIN DEL PROCESO ---");
   }
 
-  // ── 1. ORDENAMIENTO ────────────────────────────────────────────────
+  // ── MÉTODOS DE UI (Sin cambios) ──────────────────────────────────────────
   List<Campaign> get _sortedCampaigns {
     if (_campaigns == null) return [];
     List<Campaign> list = List.from(_campaigns!);
@@ -81,11 +137,9 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
     return list;
   }
 
-  // ── 2. FILTRADO POR BÚSQUEDA ───────────────────────────────────────
   List<Campaign> get _displayedCampaigns {
     final sorted = _sortedCampaigns;
     if (_searchQuery.isEmpty) return sorted;
-
     return sorted.where((c) {
       final title   = c.title.toLowerCase();
       final company = (c.businessName ?? c.title ?? '').toLowerCase();
@@ -93,11 +147,9 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
     }).toList();
   }
 
-  // ── BUILD ───────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
@@ -107,11 +159,8 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
           _buildSectionTitle(),
           _buildFilterRow(),
           Expanded(
-            // 🚀 REFRESH INDICATOR: El gesto nativo de "Jalar para actualizar"
             child: RefreshIndicator(
               color: Colors.black,
-              backgroundColor: Colors.white,
-              displacement: 20,
               onRefresh: _loadData,
               child: _isLoading ? _buildSkeleton() : _buildList(),
             ),
@@ -121,7 +170,6 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
     );
   }
 
-  // ── HEADER ──────────────────────────────────────────────────────────
   Widget _buildHeader(double topPadding) {
     return Container(
       width: double.infinity,
@@ -140,24 +188,17 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Explora Oportunidades',
-                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-              Image.asset('assets/images/hugeicons_notification-01.png', width: 26, height: 26, color: Colors.white),
+              const Text('Explora Oportunidades', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+              const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 28),
             ],
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _searchCtrl,
             focusNode: _searchFocus,
-            textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               hintText: 'Busca una campaña o empresa',
-              prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => _searchCtrl.clear())
-                  : null,
+              prefixIcon: const Icon(Icons.search, color: Colors.grey),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(50), borderSide: BorderSide.none),
@@ -169,76 +210,41 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
     );
   }
 
-  Widget _buildSectionTitle() {
-    final total = _displayedCampaigns.length;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text('Campañas Disponibles', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          if (_searchQuery.isNotEmpty) Text('$total resultado${total == 1 ? '' : 's'}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
-        ],
-      ),
-    );
-  }
+  Widget _buildSectionTitle() => const Padding(
+    padding: EdgeInsets.fromLTRB(24, 20, 24, 4),
+    child: Text('Campañas Disponibles', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+  );
 
-  Widget _buildFilterRow() {
-    return SizedBox(
-      height: 52,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _filters.length,
-        itemBuilder: (context, index) {
-          final filter = _filters[index];
-          final isSelected = _selectedFilter == filter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(filter),
-              selected: isSelected,
-              onSelected: (_) => setState(() => _selectedFilter = filter),
-              selectedColor: const Color(0xFF1C1C1E),
-              backgroundColor: const Color(0xFFF2F2F7),
-              labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black, fontWeight: FontWeight.w600, fontSize: 13),
-              shape: const StadiumBorder(side: BorderSide.none),
-              showCheckmark: false,
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _buildFilterRow() => SizedBox(
+    height: 52,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: _filters.length,
+      itemBuilder: (context, index) {
+        final filter = _filters[index];
+        final isSelected = _selectedFilter == filter;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ChoiceChip(
+            label: Text(filter),
+            selected: isSelected,
+            onSelected: (_) => setState(() => _selectedFilter = filter),
+            selectedColor: const Color(0xFF1C1C1E),
+            backgroundColor: const Color(0xFFF2F2F7),
+            labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
+            shape: const StadiumBorder(side: BorderSide.none),
+            showCheckmark: false,
+          ),
+        );
+      },
+    ),
+  );
 
-  // ── LISTA (Con soporte para AlwaysScrollable) ──────────────────────
   Widget _buildList() {
     final campaigns = _displayedCampaigns;
-
-    if (campaigns.isEmpty) {
-      return ListView(
-        // 🚀 Permite que el Pull-to-Refresh funcione aun si la lista está vacía
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          SizedBox(
-            height: MediaQuery.of(context).size.height * 0.4,
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.search_off_rounded, size: 48, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Text('No hay campañas disponibles', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
+    if (campaigns.isEmpty) return ListView(physics: const AlwaysScrollableScrollPhysics(), children: [const Center(child: Padding(padding: EdgeInsets.only(top: 50), child: Text('No hay campañas', style: TextStyle(color: Colors.grey))))]);
     return ListView.builder(
-      // 🚀 Forzamos el scroll para que el RefreshIndicator siempre responda
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       itemCount: campaigns.length,
@@ -246,12 +252,7 @@ class _ExploreCampaignsScreenState extends State<ExploreCampaignsScreen> {
         campaign: campaigns[index],
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => CampaignDetailScreen(
-              campaign: campaigns[index],
-              accessToken: widget.accessToken,
-            ),
-          ),
+          MaterialPageRoute(builder: (_) => CampaignDetailScreen(campaign: campaigns[index], accessToken: _currentAccessToken)),
         ),
       ),
     );

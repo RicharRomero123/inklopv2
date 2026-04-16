@@ -20,20 +20,30 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   bool _isLoading = false;
 
+  // ── LÓGICA DE AUTENTICACIÓN SOCIAL ──────────────────────────────────────────
   Future<void> _handleSocialAuth(String connection) async {
     Navigator.pop(context);
     setState(() => _isLoading = true);
 
     try {
+      // 🚀 1. Llamamos al login social y obtenemos el mapa de resultados
       final result = await _authService.loginSocialWithDetails(connection);
-      final token = result['token'];
-      final email = result['email'];
+
+      final String? token = result['token'];
+      final String? refreshToken = result['refreshToken']; // 🚀 Capturamos el refresh
+      final String? email = result['email'];
 
       if (token != null && email != null && mounted) {
+        // 🚀 2. Verificamos si el perfil ya está registrado en el backend
         final isCompleted = await _userApiService.isProfileCompleted(token);
 
         if (isCompleted) {
-          await _storageService.saveToken(token);
+          // ✅ 3. USUARIO COMPLETADO: Guardamos AMBOS tokens con el nuevo formato
+          await _storageService.saveToken(
+            access: token,
+            refresh: refreshToken ?? '', // Enviamos vacío si no viene el refresh
+          );
+
           if (mounted) {
             Navigator.pushAndRemoveUntil(
               context,
@@ -42,6 +52,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             );
           }
         } else {
+          // 🚀 4. USUARIO NUEVO: Vamos al flujo de completar datos
           if (mounted) {
             Navigator.push(
               context,
@@ -55,7 +66,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -101,7 +116,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             children: [
               const Spacer(flex: 1),
 
-              // ── HERO ──────────────────────────────────────────────
+              // Hero Image
               SizedBox(
                 width: double.infinity,
                 child: Image.asset(
@@ -113,7 +128,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
               const Spacer(flex: 1),
 
-              // ── LOGO + TAGLINE ────────────────────────────────────
+              // Logo y Título
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(
@@ -146,16 +161,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
               const Spacer(flex: 2),
 
-              // ── BOTÓN EMPEZAR ─────────────────────────────────────
+              // Botón Empezar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: SizedBox(
                   width: double.infinity,
                   height: 60,
                   child: _isLoading
-                      ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  )
+                      ? const Center(child: CircularProgressIndicator(color: Colors.white))
                       : FilledButton(
                     onPressed: _showAuthSheet,
                     style: FilledButton.styleFrom(
@@ -168,10 +181,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                     child: const Text(
                       'Empezar',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -185,7 +195,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 }
 
-// ── BOTTOM SHEET ──────────────────────────────────────────────────────────────
+// ── BOTTOM SHEET Y COMPONENTES (Sin cambios de lógica) ───────────────────────
 class _AuthBottomSheet extends StatelessWidget {
   final VoidCallback onGoogle;
   final VoidCallback onApple;
@@ -212,7 +222,6 @@ class _AuthBottomSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cerrar
           Align(
             alignment: Alignment.centerRight,
             child: GestureDetector(
@@ -221,31 +230,18 @@ class _AuthBottomSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-
-          // Logo
           Image.asset('assets/images/logo_inklop.png', height: 26, fit: BoxFit.contain),
           const SizedBox(height: 16),
-
-          // Título
           const Text(
             'Empieza Ahora',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1C1C1E),
-              letterSpacing: -0.5,
-            ),
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF1C1C1E)),
           ),
           const SizedBox(height: 8),
-
-          // Subtítulo
           const Text(
             'Regístrate para empezar a monetizar tu creatividad o crear campañas y monitorear tu alcance',
             style: TextStyle(fontSize: 14, color: Color(0xFF8E8E93), height: 1.5),
           ),
           const SizedBox(height: 28),
-
-          // Botón Email
           SizedBox(
             width: double.infinity,
             height: 54,
@@ -253,49 +249,25 @@ class _AuthBottomSheet extends StatelessWidget {
               onPressed: onEmail,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF1C1C1E),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              child: const Text(
-                'Continuar con Email',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
+              child: const Text('Continuar con Email', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
             ),
           ),
           const SizedBox(height: 12),
-
-          // Google + Apple en fila
           Row(
             children: [
-              Expanded(
-                child: _SocialButton(
-                  iconPath: 'assets/images/ic_google.png',
-                  onTap: onGoogle,
-                ),
-              ),
+              Expanded(child: _SocialButton(iconPath: 'assets/images/ic_google.png', onTap: onGoogle)),
               const SizedBox(width: 12),
-              Expanded(
-                child: _SocialButton(
-                  iconPath: 'assets/images/ic_apple.png',
-                  onTap: onApple,
-                ),
-              ),
+              Expanded(child: _SocialButton(iconPath: 'assets/images/ic_apple.png', onTap: onApple)),
             ],
           ),
           const SizedBox(height: 16),
-
-          // Términos
           Center(
             child: Text(
               'Al continuar aceptas nuestros Términos y Privacidad',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: Colors.grey[400], height: 1.4),
+              style: TextStyle(fontSize: 11, color: Colors.grey[400]),
             ),
           ),
         ],
@@ -304,11 +276,9 @@ class _AuthBottomSheet extends StatelessWidget {
   }
 }
 
-// ── BOTÓN SOCIAL ──────────────────────────────────────────────────────────────
 class _SocialButton extends StatelessWidget {
   final String iconPath;
   final VoidCallback onTap;
-
   const _SocialButton({required this.iconPath, required this.onTap});
 
   @override
@@ -317,13 +287,8 @@ class _SocialButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: 54,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF2F2F7),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Center(
-          child: Image.asset(iconPath, height: 24, fit: BoxFit.contain),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(14)),
+        child: Center(child: Image.asset(iconPath, height: 24, fit: BoxFit.contain)),
       ),
     );
   }

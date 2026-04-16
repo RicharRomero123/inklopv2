@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:inklop_v1/features/dashboard/data/models/creator_metrics_model.dart';
+import 'package:inklop_v1/features/dashboard/presentation/widgets/metric_card.dart';
 import 'models/submission_model.dart';
 
 class DashboardApiService {
@@ -66,5 +68,24 @@ class DashboardApiService {
     } catch (e) { return null; }
     return null;
   }
+// 🚀 EL GET QUE NECESITABAS: Trae las 3 métricas de golpe
+  // Ahora 'CreatorMetrics' ya será reconocido como un tipo válido
+  Future<CreatorMetrics?> getCreatorMetrics(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/metrics/dashboard/creator'),
+        headers: _headers(token),
+      );
+
+      if (response.statusCode == 200) {
+        return CreatorMetrics.fromJson(jsonDecode(response.body));
+      }
+    } catch (e) {
+      print("Error Metrics API: $e");
+    }
+    return null;
+  }
+
+
 
 }

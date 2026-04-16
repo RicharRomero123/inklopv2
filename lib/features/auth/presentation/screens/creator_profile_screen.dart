@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:inklop_v1/features/social_media/presentation/screens/social_media_link_screen.dart';
 import '../../../../core/services/secure_storage_service.dart';
 import '../../data/user_api_service.dart';
+import '../../data/auth_service.dart'; // 🚀 Importamos el AuthService
 
 class CreatorProfileScreen extends StatefulWidget {
   final String accessToken;
@@ -25,8 +26,8 @@ class CreatorProfileScreen extends StatefulWidget {
 class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   final UserApiService _apiService = UserApiService();
   final SecureStorageService _storageService = SecureStorageService();
+  final AuthService _authService = AuthService(); // 🚀 Instancia de AuthService
 
-  // Validador de username con debounce
   Timer? _debounce;
   bool _isCheckingUsername = false;
   bool? _isUsernameValid;
@@ -67,7 +68,6 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     super.dispose();
   }
 
-  // ── VALIDACIÓN USERNAME ───────────────────────────────────────────────────
   void _onUsernameChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     if (value.isEmpty) {
@@ -75,6 +75,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
       return;
     }
     setState(() {
+      _isCheckingPassword();
       _isCheckingUsername = true;
       _isUsernameValid = null;
     });
@@ -89,7 +90,9 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     });
   }
 
-  // ── SUBMIT ────────────────────────────────────────────────────────────────
+  void _isCheckingPassword() {}
+
+  // ── SUBMIT CON REFRESH TOKEN FORZADO ──────────────────────────────────────
   Future<void> _submitData() async {
     if (_isUsernameValid != true) {
       _showSnackBar('Nombre de usuario no disponible', Colors.red);
@@ -103,16 +106,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     setState(() => _isLoadingPost = true);
 
     try {
-      final responseData =
-      await _apiService.getCloudinarySignature(widget.accessToken);
-      if (responseData == null) {
-        throw Exception("Error al obtener datos de subida del backend");
-      }
+      // 1. Obtener firma y subir a Cloudinary
+      final responseData = await _apiService.getCloudinarySignature(widget.accessToken);
+      if (responseData == null) throw Exception("Error en firma de Cloudinary");
 
-      final imageUrl =
-      await _apiService.uploadToCloudinary(_profileImage!, responseData);
-      if (imageUrl == null) throw Exception("Fallo al subir imagen a Cloudinary");
+      final imageUrl = await _apiService.uploadToCloudinary(_profileImage!, responseData);
+      if (imageUrl == null) throw Exception("Fallo al subir imagen");
 
+      // 2. Registrar perfil en el Backend
       final payload = {
         "names": _controllers['names']!.text.trim(),
         "lastNames": _controllers['lastNames']!.text.trim(),
@@ -131,18 +132,51 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
           payload: payload, token: widget.accessToken);
 
       if (success && mounted) {
-        await _storageService.saveToken(widget.accessToken);
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                SocialMediaLinkScreen(accessToken: widget.accessToken),
-          ),
-              (r) => false,
-        );
+        // 🚀 3. PROCESO DE REFRESH TOKEN OBLIGATORIO
+        // Necesitamos renovar el token para que los nuevos permisos de Creador se activen
+        final String? storedRefreshToken = await _storageService.getRefreshToken();
+
+        if (storedRefreshToken != null) {
+          // Llamamos a la función que mapeaste en el AuthService
+          final newTokens = await _authService.renewToken(storedRefreshToken);
+
+          final String? newToken = newTokens['token'];
+          final String? newRefresh = newTokens['refreshToken'];
+
+          if (newToken != null) {
+            // Guardamos los tokens frescos (Access y Refresh actualizado)
+            await _storageService.saveToken(
+              access: newToken,
+              refresh: newRefresh ?? storedRefreshToken,
+            );
+
+            // 4. Navegamos con el token NUEVO y FRESCO
+            if (mounted) {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SocialMediaLinkScreen(accessToken: newToken),
+                ),
+                    (r) => false,
+              );
+            }
+          }
+        } else {
+          // Fallback en caso de no haber refresh token (poco probable)
+          await _storageService.saveAccessToken(widget.accessToken);
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SocialMediaLinkScreen(accessToken: widget.accessToken),
+              ),
+                  (r) => false,
+            );
+          }
+        }
       }
     } catch (e) {
-      if (mounted) _showSnackBar(e.toString(), Colors.red);
+      if (mounted) _showSnackBar('Error: $e', Colors.red);
     } finally {
       if (mounted) setState(() => _isLoadingPost = false);
     }
@@ -152,19 +186,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
       .showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
 
   Future<void> _pickImage() async {
-    final img =
-    await _picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+    final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
     if (img != null) setState(() => _profileImage = File(img.path));
   }
 
   @override
   Widget build(BuildContext context) {
     Widget? usernameIcon = _isCheckingUsername
-        ? const SizedBox(
-      width: 20,
-      height: 20,
-      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-    )
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
         : _isUsernameValid == true
         ? const Icon(Icons.check_circle, color: Colors.green)
         : _isUsernameValid == false
@@ -176,20 +205,9 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 50,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16.0),
-          child: Center(
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFFF8F8F8),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.black, size: 14),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 18),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
@@ -197,43 +215,27 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             children: [
-              // ── FOTO DE PERFIL ────────────────────────────────────
+              // Foto de Perfil
               Center(
                 child: GestureDetector(
                   onTap: _pickImage,
                   child: Stack(
                     children: [
                       Container(
-                        height: 110,
-                        width: 110,
+                        height: 110, width: 110,
                         decoration: BoxDecoration(
                           color: const Color(0xFFF2F2F2),
                           shape: BoxShape.circle,
-                          image: _profileImage != null
-                              ? DecorationImage(
-                            image: FileImage(_profileImage!),
-                            fit: BoxFit.cover,
-                          )
-                              : null,
+                          image: _profileImage != null ? DecorationImage(image: FileImage(_profileImage!), fit: BoxFit.cover) : null,
                         ),
-                        child: _profileImage == null
-                            ? const Icon(Icons.person,
-                            size: 55, color: Colors.black)
-                            : null,
+                        child: _profileImage == null ? const Icon(Icons.person, size: 55, color: Colors.black) : null,
                       ),
                       Positioned(
-                        bottom: 0,
-                        right: 0,
+                        bottom: 0, right: 0,
                         child: Container(
-                          height: 36,
-                          width: 36,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE0E0E0),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                          ),
-                          child: const Icon(Icons.edit,
-                              size: 18, color: Colors.black),
+                          height: 36, width: 36,
+                          decoration: BoxDecoration(color: const Color(0xFFE0E0E0), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
+                          child: const Icon(Icons.edit, size: 18, color: Colors.black),
                         ),
                       ),
                     ],
@@ -241,118 +243,37 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              const Text(
-                'Completa Tu Perfil',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A)),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Date a conocer a otros creadores',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
+              const Text('Completa Tu Perfil', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
 
-              // ── USERNAME ──────────────────────────────────────────
-              _buildInput(
-                label: 'Nombre de usuario',
-                hint: '@username',
-                keyName: 'username',
-                onChanged: _onUsernameChanged,
-                suffix: usernameIcon != null
-                    ? Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: usernameIcon,
-                )
-                    : null,
-              ),
-              if (_isUsernameValid == false)
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 12, top: 4),
-                    child: Text(
-                      'No disponible o inválido',
-                      style: TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 12),
+              _buildInput(label: 'Nombre de usuario', hint: '@username', keyName: 'username', onChanged: _onUsernameChanged, suffix: usernameIcon != null ? Padding(padding: const EdgeInsets.all(12), child: usernameIcon) : null),
+              if (_isUsernameValid == false) const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 12, top: 4), child: Text('No disponible o inválido', style: TextStyle(color: Colors.red, fontSize: 12)))),
 
-              // ── NOMBRE + APELLIDO ─────────────────────────────────
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(
-                    child: _buildInput(
-                        label: 'Nombre', hint: 'Nombres', keyName: 'names'),
-                  ),
+                  Expanded(child: _buildInput(label: 'Nombre', hint: 'Nombres', keyName: 'names')),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildInput(
-                        label: 'Apellido',
-                        hint: 'Apellidos',
-                        keyName: 'lastNames'),
-                  ),
+                  Expanded(child: _buildInput(label: 'Apellido', hint: 'Apellidos', keyName: 'lastNames')),
                 ],
               ),
               const SizedBox(height: 12),
-
-              // ── BIO ───────────────────────────────────────────────
-              _buildInput(
-                label: 'Bio',
-                hint: 'Comparte algo curioso sobre ti...',
-                keyName: 'bio',
-                isBio: true,
-              ),
+              _buildInput(label: 'Bio', hint: 'Sobre ti...', keyName: 'bio', isBio: true),
               const SizedBox(height: 12),
-
-              // ── TELÉFONO ──────────────────────────────────────────
-              _buildInput(
-                label: 'Teléfono móvil',
-                hint: '999999999',
-                keyName: 'phone',
-                isNumber: true,
-              ),
+              _buildInput(label: 'Teléfono', hint: '999999999', keyName: 'phone', isNumber: true),
               const SizedBox(height: 12),
+              _buildInput(label: 'DNI', hint: 'Documento', keyName: 'document', isNumber: true),
 
-              // ── DNI ───────────────────────────────────────────────
-              _buildInput(
-                label: 'DNI',
-                hint: 'Número de documento',
-                keyName: 'document',
-                isNumber: true,
-              ),
               const SizedBox(height: 32),
-
-              // ── BOTÓN CONTINUAR ───────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 height: 54,
                 child: FilledButton(
-                  onPressed: (_isLoadingPost || _isUsernameValid != true)
-                      ? null
-                      : _submitData,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    disabledBackgroundColor: const Color(0xFFF1F1F1),
-                    shape: const StadiumBorder(),
-                  ),
+                  onPressed: (_isLoadingPost || _isUsernameValid != true) ? null : _submitData,
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1A1A1A), shape: const StadiumBorder()),
                   child: _isLoadingPost
-                      ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2.5),
-                  )
-                      : const Text(
-                    'Continuar',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                      ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               ),
               const SizedBox(height: 24),
@@ -363,71 +284,28 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     );
   }
 
-  // ── CAMPO DE TEXTO ────────────────────────────────────────────────────────
-  Widget _buildInput({
-    required String label,
-    required String hint,
-    required String keyName,
-    bool isBio = false,
-    bool isNumber = false,
-    Function(String)? onChanged,
-    Widget? suffix,
-  }) {
+  Widget _buildInput({required String label, required String hint, required String keyName, bool isBio = false, bool isNumber = false, Function(String)? onChanged, Widget? suffix}) {
     final focusNode = _focusNodes[keyName]!;
     final controller = _controllers[keyName]!;
     final bool isActive = focusNode.hasFocus || controller.text.isNotEmpty;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4.0),
-          child: Text(
-            label,
-            style: const TextStyle(
-                color: Color(0xFFADADAD),
-                fontSize: 13,
-                fontWeight: FontWeight.w500),
-          ),
-        ),
+        Text(label, style: const TextStyle(color: Color(0xFFADADAD), fontSize: 13, fontWeight: FontWeight.w500)),
         const SizedBox(height: 6),
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
             color: const Color(0xFFF7F7F7),
             borderRadius: BorderRadius.circular(isBio ? 15 : 30),
-            border: Border.all(
-              color: isActive
-                  ? const Color(0xFFE0E0E0)
-                  : const Color(0xFFF3F3F3),
-              width: 1.5,
-            ),
+            border: Border.all(color: isActive ? const Color(0xFFE0E0E0) : const Color(0xFFF3F3F3), width: 1.5),
           ),
           child: TextField(
-            controller: controller,
-            focusNode: focusNode,
+            controller: controller, focusNode: focusNode,
             maxLines: isBio ? 3 : 1,
-            keyboardType:
-            isNumber ? TextInputType.number : TextInputType.text,
-            onChanged: (val) {
-              setState(() {});
-              onChanged?.call(val);
-            },
-            style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: Colors.black),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: const TextStyle(
-                  color: Color(0xFFADADAD),
-                  fontWeight: FontWeight.normal,
-                  fontSize: 14),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(
-                  horizontal: 20, vertical: isBio ? 12 : 14),
-              suffixIcon: suffix,
-            ),
+            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+            onChanged: (val) { setState(() {}); onChanged?.call(val); },
+            decoration: InputDecoration(hintText: hint, border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14), suffixIcon: suffix),
           ),
         ),
       ],

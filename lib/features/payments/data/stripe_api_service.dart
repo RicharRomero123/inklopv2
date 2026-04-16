@@ -48,6 +48,7 @@ class StripeApiService {
     try {
       final response = await http.get(url, headers: _headers(token));
       if (response.statusCode == 200) {
+        // Retorna: { "currentBalance": X, "currentBalanceCurrency": "USD", "pendingBalance": Y, ... }
         return jsonDecode(response.body);
       }
     } catch (e) {
@@ -58,13 +59,22 @@ class StripeApiService {
 
   Future<StripeAccountLinkResponse?> generateAccountLink(String token) async {
     final url = Uri.parse('${AppConstants.apiBaseUrl}/stripe/account-link');
+
+    print('🚀 [STRIPE API] GENERANDO LINK EN: $url');
+
     try {
       final response = await http.post(url, headers: _headers(token));
-      if (response.statusCode == 200) {
+
+      print('📡 [STRIPE API] STATUS CODE: ${response.statusCode}');
+      print('📥 [RESPONSE BODY]: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
         return StripeAccountLinkResponse.fromJson(jsonDecode(response.body));
+      } else {
+        print('❌ ERROR DEL SERVIDOR: El endpoint devolvió ${response.statusCode}');
       }
     } catch (e) {
-      print("❌ Error Account Link: $e");
+      print("❌ ERROR DE RED/CONEXIÓN: $e");
     }
     return null;
   }
@@ -83,6 +93,28 @@ class StripeApiService {
       }
     } catch (e) {
       print("❌ Error getProfileStatus: $e");
+    }
+    return null;
+  }
+  // --- GET /payments/payout-history ---
+  // Obtiene el resumen de cobros realizados por el influencer
+  Future<StripePayoutHistory?> getPayoutHistory(String token) async {
+    final url = Uri.parse('${AppConstants.apiBaseUrl}/payments/payout-history');
+
+    print('🚀 [STRIPE API] OBTENIENDO HISTORIAL DE PAGOS EN: $url');
+
+    try {
+      final response = await http.get(url, headers: _headers(token));
+
+      print('📡 [STRIPE API] STATUS CODE: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        return StripePayoutHistory.fromJson(jsonDecode(response.body));
+      } else {
+        print('❌ ERROR HISTORIAL: ${response.body}');
+      }
+    } catch (e) {
+      print("❌ Error de red en historial de pagos: $e");
     }
     return null;
   }
